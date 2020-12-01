@@ -1,0 +1,7 @@
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\AnalysisOverManyPeoplesRats\helper_functions\GUI_make_linear_position.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\AnalysisOverManyPeoplesRats\helper_functions\get_velocity.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\PFCpaperscripts\Helper_scripts\Oct\GUI_make_arms_cleanup_posdata_day.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\PFCpaperscripts\Helper_scripts\Oct\GUI_make_behavior_day.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\PFCpaperscripts\Helper_scripts\Oct\GUI_makelaps_day.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\PFCpaperscripts\ProcessData.m
+C:\Users\Alice Berners-Lee\Dropbox\FosterLab\scripts\varycolor.m
