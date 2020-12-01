@@ -1,0 +1,53 @@
+function thetatrig_FR(thisdir)
+load(thisdir,'times_armon_thetaof_headingarm_lap_thetahalf_all','PFCthetaspikes_binned');
+Th = times_armon_thetaof_headingarm_lap_thetahalf_all;
+clear times_armon_thetaof_headingarm_lap_thetahalf_all
+
+binsize = .02;
+window = [-2 2];
+ind = [window(1):binsize:window(2)];
+% modind = [ind>=-.02 & ind<.04]; %these do better for session 1 at least
+% modind2 = [ind>=-.08 & ind<-.02];
+modind = [ind>=-.03 & ind<.03]; %this too
+modind2 = [ind>=-.09 & ind<-.03];
+% modind = [ind>=0 & ind<.06];
+% modind2 = [ind>=-.06 & ind<0];
+dat = NaN(size(PFCthetaspikes_binned,1),3,2,2);
+for iarm = 1:3
+    oths = setdiff(1:3,iarm);
+    for ioth = 1:2
+        dat(:,iarm,ioth,1) = nanmean(nansum(PFCthetaspikes_binned(:,modind,Th(:,3)==iarm & Th(:,4)==oths(ioth)),2)./(sum(modind)*binsize),3);
+        dat(:,iarm,ioth,2) = nanmean(nansum(PFCthetaspikes_binned(:,modind2,Th(:,3)==iarm & Th(:,4)==oths(ioth)),2)./(sum(modind2)*binsize),3);
+    end
+end
+
+thetatrigFR_armcombs = NaN(size(PFCthetaspikes_binned,1),6,2);
+for icell = 1:size(PFCthetaspikes_binned,1)
+    dat2 = dat(icell,:,:,1);
+    thetatrigFR_armcombs(icell,:,1) = dat2(:);
+    dat3 = dat(icell,:,:,2);
+    thetatrigFR_armcombs(icell,:,2) = dat3(:);
+end
+% datt1 = thetatrigFR_armcombs(:,:,1);datt = thetatrigFR_armcombs(:,:,2); 
+% figure; plot(datt1,datt,'.')
+% for icell = 1:19; r(icell,1) = corr(datt1(icell,:)',datt(icell,:)','type','Spearman'); end
+thetatrigFR_armcombs = thetatrigFR_armcombs(:,:,1);
+save(thisdir,'thetatrigFR_armcombs','-append')
+
+disp('Done with thetatrigFR')
+% 
+% % also try decoding with both
+% 
+load(thisdir,[label  '_pfcfwdreplaymodu_armXpos'],'prospectiveTheta_armcombs')
+eval(['pfcfwdreplaymodu_armXpos = ' label '_pfcfwdreplaymodu_armXpos;'])
+ReZ = nanzscore(pfcfwdreplaymodu_armXpos);
+ThZ = nanzscore(prospectiveTheta_armcombs);
+
+frZ1 = nanzscore(thetatrigFR_armcombs(:,:,1));
+frZ2 = nanzscore(thetatrigFR_armcombs(:,:,2));
+[r,p] = corr(ReZ(:),frZ1(:),'type','Spearman','rows','complete')
+
+[r,p] = corr(ReZ(:),frZ2(:),'type','Spearman')
+
+[r,p] = corr(ThZ(:),frZ1(:),'type','Spearman')
+[r,p] = corr(ThZ(:),frZ2(:),'type','Spearman')

@@ -1,0 +1,160 @@
+function [p,bb,armsig,R1,R2,coeff1,coeff2] = propspective_coding_test(thisdir,toplot,label)
+binsize = .2;
+load(thisdir,'other_cells','spikedata','vel','behave_change_log','laps_singlepass','pos','linposcat','dirname','armpos','dirname',...
+    [label '_moduarm2'],[label '_pSSDarm'],[label '_SSDarm'],[label '_Cand_sig_modu_include'])
+eval(['armsig = [' label '_pSSDarm ' label '_SSDarm ' label '_Cand_sig_modu_include(:,1)];'])
+eval(['moduarm = [' label '_moduarm2];'])
+[~,b] = max(moduarm);
+[~,ab] = max(abs(moduarm));
+armsig(:,4:5) = [b' ab'];
+
+%     [label '_pSSDarm'],[label '_Cand_sig_modu_include'])
+% eval(['armsig = [' label '_pSSDarm ' label '_Cand_sig_modu_include(:,1)];'])
+combs = nchoosek(1:3,2);
+SSDnew = zeros(size(armsig,1),1);
+for ic = 1:size(combs,1)
+    SSDnew = SSDnew+((moduarm(combs(ic,1),:)-moduarm(combs(ic,2),:))'.^2);    
+end
+armsig(:,6) = SSDnew;
+spks = spikedata(ismember(spikedata(:,2),other_cells),:);
+traj = []; fr_lap = []; lap_ind = [];
+for ilap = 1:max(laps_singlepass)
+   leave = find(behave_change_log(:,5) & laps_singlepass == ilap,1,'first'); %1 leave middle 5 leave platform
+   lapind = leave:find(behave_change_log(:,6) & laps_singlepass == ilap,1,'first'); % 6 is arrive middle
+   
+   binz = binsize/(1/60);
+   lapindb = ceil((1:length(lapind))/binz);
+   
+   nextarm = armpos(find(laps_singlepass == ilap,1,'last'));
+   thisarm = armpos(find(laps_singlepass == ilap,1,'first'));
+   
+   s = spks(ismember(spks(:,3), lapind),1:2);
+   fr = zeros(max(lapindb),length(other_cells)); 
+   
+   [~,~,i] = histcounts(s(:,1),pos(lapind(1),1):binsize:pos(lapind(end),1));
+   for icell = 1:length(other_cells)
+       if sum(s(:,2)==other_cells(icell))>0
+          fr(:,icell) = histc(i(s(:,2)==other_cells(icell)),1:max(lapindb));
+       end
+   end
+   fr_lap = cat(1,fr_lap,fr./binsize);
+   traj = cat(1,traj,ones(max(lapindb),1)*[nextarm thisarm]);
+   lap_ind = cat(1,lap_ind,ones(max(lapindb),1)*ilap);
+end
+
+
+Rs = NaN(3,1);
+for iarm = 1:3
+    bt = fitlm(fr_lap(traj(:,2)==iarm,:),traj(traj(:,2)==iarm,1));
+    Rs(iarm) = bt.Rsquared.Ordinary;
+end
+            
+
+n = floor(max(lap_ind)/2);
+m = max(lap_ind)+1-n;
+% R1 = NaN(3,1); R2 = R1; 
+% % coeff1 = NaN(size(fr_lap,2),3); 
+% % coeff2 = coeff1;
+% for iarm = 1:3
+%     B1 = fitlm(fr_lap(lap_ind<=n & traj(:,2)==iarm,:),traj(lap_ind<=n & traj(:,2)==iarm,1));
+%     R1(iarm) = B1.Rsquared.Ordinary;
+%     B2 = fitlm(fr_lap(lap_ind>=m & traj(:,2)==iarm,:),traj(lap_ind>=m & traj(:,2)==iarm,1));
+%     R2(iarm) = B2.Rsquared.Ordinary;
+% 
+% %     coeff1a = table2array(B1.Coefficients(:,1));
+% %     coeff1(:,iarm) = coeff1a(2:end);
+% %     coeff2a = table2array(B2.Coefficients(:,1));
+% %     coeff2(:,iarm) = coeff2a(2:end);
+% end
+
+% make this about laps
+num_folds = 10;
+num_shuffles = 10;
+coeff1a = NaN(3,num_folds,num_shuffles,size(fr_lap,2));
+coeff2a = coeff1a;
+allacc1 = NaN(num_folds,num_shuffles);
+allacc2 = allacc1; allaccS2 = allacc1; allaccS1 = allacc1;
+for j = 1:num_shuffles                    
+    for i = 1:num_folds     
+        acc1 = []; acc2 = []; accS1 = []; accS2 = [];
+        for iarm = 1:3
+            indices = crossvalind('Kfold',sum(traj(:,2)==iarm & lap_ind<=n),num_folds);         
+            test = (indices == i); train = ~test;    
+            incl = sum(fr_lap(traj(:,2)==iarm & lap_ind<=n,:)~=0)>5;
+            dat1 = zscore(fr_lap(traj(:,2)==iarm & lap_ind<=n,incl));
+            dat2 = traj(traj(:,2)==iarm & lap_ind<=n,1);            
+            lab = dat2(train);
+            [guess,~,~,~,d] = classify(dat1(test,:),dat1(train,:),lab,'linear');            
+            acc1 = cat(1,acc1,guess==dat2(test));   
+            guessS1 = classify(dat1(test,:),dat1(train,:),lab(randperm(length(lab))),'linear');
+            accS1 = cat(1,accS1,guessS1==dat2(test));
+            if size(d,1)>1
+                coeff1a(iarm,i,j,incl) = abs(d(2,1).linear);
+            end
+            
+            indices = crossvalind('Kfold',sum(traj(:,2)==iarm & lap_ind>=m),num_folds);         
+            test = (indices == i); train = ~test;    
+            incl = sum(fr_lap(traj(:,2)==iarm & lap_ind>=m,:)~=0)>5;
+            dat1 = zscore(fr_lap(traj(:,2)==iarm & lap_ind>=m,incl));
+            dat2 = traj(traj(:,2)==iarm & lap_ind>=m,1);            
+            lab = dat2(train);
+            [guess,~,~,~,d] = classify(dat1(test,:),dat1(train,:),lab,'linear');        
+            acc2 = cat(1,acc2,guess==dat2(test));   
+            guessS2 = classify(dat1(test,:),dat1(train,:),lab(randperm(length(lab))),'linear');
+            accS2 = cat(1,accS2,guessS2==dat2(test));
+            if size(d,1)>1
+                coeff2a(iarm,i,j,incl) = abs(d(2,1).linear);
+            end
+        end                
+        allacc1(i,j) = sum(acc1)./length(acc1);
+        allacc2(i,j) = sum(acc2)./length(acc2);
+        allaccS1(i,j) = sum(accS1)./length(accS1);
+        allaccS2(i,j) = sum(accS2)./length(accS2);
+    end    
+end
+% p = (sum(mean(allaccS)>=mean(mean(allacc)))+1)/(num_shuffles+1);
+% p = signrank(allacc(:),allaccS(:),'tail','right');
+coeff1 = squeeze(nanmean(nanmean(nanmean(coeff1a))));
+coeff2 = squeeze(nanmean(nanmean(nanmean(coeff2a))));
+R1 = nanmean(nanmean(allacc1))-nanmean(nanmean(allaccS1));
+R2 = nanmean(nanmean(allacc2))-nanmean(nanmean(allaccS2));
+
+
+num_folds = 10;
+num_shuffles = 100;
+allacc = NaN(num_folds,num_shuffles);
+allaccS = allacc;
+betas = NaN(3,num_folds,num_shuffles,size(fr_lap,2));
+for j = 1:num_shuffles                    
+    for i = 1:num_folds        
+        acc = []; accS = [];
+        for iarm = 1:3
+            indices = crossvalind('Kfold',sum(traj(:,2)==iarm),num_folds);         
+            test = (indices == i); train = ~test;    
+            incl = sum(fr_lap(traj(:,2)==iarm,:)~=0)>5;
+            dat1 = zscore(fr_lap(traj(:,2)==iarm,incl));
+            dat2 = traj(traj(:,2)==iarm,1);            
+            lab = dat2(train);
+            [guess,~,~,~,d] = classify(dat1(test,:),dat1(train,:),lab,'linear');
+            acc = cat(1,acc,guess==dat2(test));            
+            guessS = classify(dat1(test,:),dat1(train,:),lab(randperm(length(lab))),'linear');
+            accS = cat(1,accS,guessS==dat2(test));
+            if size(d,1)>1
+                betas(iarm,i,j,incl) = abs(d(2,1).linear);
+            end
+        end                
+        allacc(i,j) = sum(acc)./length(acc);
+        allaccS(i,j) = sum(accS)./length(accS);
+    end    
+end
+% p = signrank(allacc(:),allaccS(:),'tail','right');
+p = (sum(mean(allaccS)>=mean(mean(allacc)))+1)/(num_shuffles+1);
+bb = squeeze(nanmean(nanmean(nanmean(betas))));
+
+%fix this script
+
+if toplot
+    figure; hold on;histogram(allaccS(:),20); histogram(allacc(:),20);  legend('Shuffle','Data')
+    title([dirname ' p = ' num2str(round(p,2,'significant'))])
+    helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\ProspectiveCoding\AllClassifyTest_' dirname])
+end

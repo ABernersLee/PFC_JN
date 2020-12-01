@@ -1,0 +1,123 @@
+cd('E:\XY_matdata\AllDays')
+d2 = dir('*.mat');
+label = 'RP';
+ps = NaN(size(d2,1),1);
+armsig = []; diffperc = []; halfperc = []; whicharm = []; wbeta = []; newC = []; newR = []; 
+minsig = []; meansig = []; toplotfd = [];
+%%
+for id =  [11] %[1:2 4:11]
+    [ps(id,1),ch,aa,R1,R2,coeff1,coeff2] = propspective_coding_test(d2(id).name,false,label);
+    armsig = cat(1,armsig,aa);
+    newC = cat(1,newC,[mean(abs(coeff1),2) mean(abs(coeff2),2)]);
+    newR = cat(1,newR,[R1 R2]);    
+    wbeta = cat(1,wbeta,ch);
+       
+    [~,percdiff,perchalf,pSSD,wa,pl] = prospective_coding_fields(d2(id).name,label);
+    diffperc = cat(1,diffperc,percdiff');
+    halfperc = cat(1,halfperc,(perchalf(:,:,2)-perchalf(:,:,1))');
+    meansig = cat(1,meansig,mean(pSSD,2));
+    minsig = cat(1,minsig,min(pSSD,[],2));    
+    whicharm = cat(1,whicharm,wa);
+    toplotfd = cat(1,toplotfd,pl);
+   disp(id) 
+end
+disp('done')
+%%
+plot_prospective_fd(toplotfd)
+
+%% Is the max heading arm the same as the max modulated arm, nope
+
+% b = whicharm(armsig(:,1)<.05,1);
+b = whicharm(armsig(:,1)<.05,1);
+a = armsig(:,4);
+j = confusionmat(a,b);
+real = (sum(j(eye(3)==1)))./(sum(sum(j)));
+
+fake = NaN(1000,1);
+for in = 1:1000
+    j = confusionmat(a(randperm(length(a))),b);
+    fake(in,1) = (sum(j(eye(3)==1)))./(sum(sum(j)));
+end
+(sum(fake>real)+1)/1001
+%% is the weight of each cell in the linear classifier related to whether it gets arm input? yes
+figure; hold on;
+set(gcf,'Position',[ 2073         146        1202         744])
+subplot(1,2,1), hold on
+h(1) = histogram(wbeta(armsig(:,1)>=.05),[0:.1:1],'Normalization','probability');
+h(2) = histogram(wbeta(armsig(:,1)<.05),[0:.1:1],'Normalization','probability');
+yl = get(gca,'ylim');
+plot([nanmedian(wbeta(armsig(:,1)>=.05)) nanmedian(wbeta(armsig(:,1)>=.05))],yl,'b-','LineWidth',3)
+plot([nanmedian(wbeta(armsig(:,1)<.05)) nanmedian(wbeta(armsig(:,1)<.05))],yl,'r-','LineWidth',3)
+p = ranksum(wbeta(armsig(:,1)<.05),wbeta(armsig(:,1)>=.05),'tail','right');
+legend(h,'Not Mod','Arm Mod')
+tt = text(.5,.2,['p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';
+    tt.FontSize = 14;
+end
+xlabel('Prospective Coeff')
+ylabel('Probability')
+set(gca,'FontSize',18)
+
+
+subplot(1,2,2)
+plot(log(armsig(:,2)),wbeta,'.k','MarkerSize',15)
+[r,p] = corr(armsig(:,2),wbeta,'rows','complete');
+tt = text(-10,.9,['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';    
+end
+tt.FontSize = 14;
+[r,p] = corr(log(armsig(:,2)),wbeta,'rows','complete');
+tt = text(-10,.85,['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';    
+end
+tt.FontSize = 14;
+xlabel('log(armSSD)')
+ylabel('Prospective Coeff')
+set(gca,'FontSize',18)
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\ProspectiveCoding\AllClassifyTest_ArmSig_wbeta_' label])
+%% is the change in FR of each cell to prosepctive arm related to whether it gets arm input? yes
+diffdat = nanmax(diffperc,[],2);
+figure; hold on;
+set(gcf,'Position',[ 2073         146        1202         744])
+subplot(1,2,1), hold on
+h(1) = histogram(diffdat(armsig(:,1)>=.05),'Normalization','probability');
+h(2) = histogram(diffdat(armsig(:,1)<.05),'Normalization','probability');
+yl = get(gca,'ylim');
+plot([nanmedian(diffdat(armsig(:,1)>=.05)) nanmedian(diffdat(armsig(:,1)>=.05))],yl,'b-','LineWidth',3)
+plot([nanmedian(diffdat(armsig(:,1)<.05)) nanmedian(diffdat(armsig(:,1)<.05))],yl,'r-','LineWidth',3)
+p = ranksum(diffdat(armsig(:,1)<.05),diffdat(armsig(:,1)>=.05),'tail','right');
+legend(h,'Not Mod','Arm Mod')
+tt = text(5,.4,['p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';
+    tt.FontSize = 14;
+end
+xlabel('Difference In FR between Heading Arm')
+ylabel('Probability')
+set(gca,'FontSize',18)
+
+
+subplot(1,2,2)
+plot(log(armsig(:,2)),diffdat,'.k','MarkerSize',15)
+[r,p] = corr(armsig(:,2),diffdat,'rows','complete');
+tt = text(-10,8,['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';
+    tt.FontSize = 14;
+end
+[r,p] = corr(log(armsig(:,2)),diffdat,'rows','complete');
+tt = text(-10,7,['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';
+    tt.FontSize = 14;
+end
+xlabel('log(armSSD)')
+ylabel('FR diff')
+set(gca,'FontSize',18)
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\ProspectiveCoding\AllClassifyTest_ArmSig_FRdiff_' label])
+%%
+
+%     helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\ProspectiveCoding\AllClassifyTest_' dirname])

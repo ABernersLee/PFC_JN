@@ -1,0 +1,297 @@
+function[RallV,RallT,RallS,RallP,RallTrev,RallA,RallProp,pT,pV,pTrev]  = Velocity_Vs_Value(thisdir,binsize,label)
+%  [RallV,RallT,RallS,RallP,RallTrev,RallA,RallProp,pT,pV,pTrev] 
+% [RsV2,RsT2,RsS2,RsP2]
+load(thisdir,'other_cells','spikedata','vel','behave_change_log','laps_singlepass','pos','linposcat','dirname','armpos',...
+    [label '_pSSDarm'],[label '_Cand_sig_modu_include'])
+eval(['armsig = [' label '_pSSDarm ' label '_Cand_sig_modu_include(:,1)];'])
+
+% binsize = .1;
+spks = spikedata(ismember(spikedata(:,2),other_cells),:);
+lap_fr = []; lap_timedat = []; lap_veldat = []; 
+lapnum = []; lap_speeddat = []; lap_posdat = []; 
+lap_timerev = []; lap_accdat = []; lap_propdat = [];
+laptime = NaN(max(laps_singlepass),1);
+speed = vel;
+vel1 = diff(speed);
+vel1 = [vel1;vel1(end)];
+vel(vel1<0) = -vel(vel1<0);
+vel(vel1==0) = NaN;
+for ilap = 1:max(laps_singlepass)
+   leave = find(behave_change_log(:,5) & laps_singlepass == ilap,1,'last'); %1 leave middle 5 leave platform
+   lapind = leave:find(laps_singlepass==ilap,1,'last');
+   
+%    currarm = armpos(find(lapind,1,'last'));
+%    lastarm = armpos(find(lapind,1,'first')-1);   
+%    
+   binz = binsize/(1/60);
+   lapindb = ceil((1:length(lapind))/binz);
+   
+   %distance from end
+%    posdat1 = NaN(length(lapind),1);
+%    lappos = linposcat(lapind);
+%     laparm = armpos(lapind);
+%     [a,b] = unique(laparm);
+%     [~,ord] = sort(b);
+%     toadd = 0;
+%    for iarm1 = 1:length(ord)
+%        iarm = a(ord(iarm1));
+%        posdat1(laparm==iarm) = abs(lappos(laparm==iarm)-lappos(find(laparm==iarm,1,'first')))+toadd;       
+%        toadd = toadd+max(posdat1(laparm==iarm));
+%    end
+   %distance to reward
+%    posdat1 = NaN(length(lapind),1);
+%    lappos = linposcat(lapind);
+%     laparm = armpos(lapind);
+%     [a,b] = unique(laparm);
+%     [~,ord] = sort(b);    
+%     ord = flip(ord);
+%     toadd = 0;
+%    for iarm1 = 1:length(ord)
+%        iarm = a(ord(iarm1));
+%        posdat1(laparm==iarm) = abs(lappos(laparm==iarm)-lappos(find(laparm==iarm,1,'last')))+toadd;       
+%        toadd = nanmax(posdat1);
+%    end
+%    
+%    %proportion of the way to reward
+%    posdat1 = (posdat1-min(posdat1))./(range(posdat1));
+%       
+%    veldat1 = vel(lapind);
+%    speeddat1 = speed(lapind);
+%    posdat = NaN(max(lapindb),1);
+%    veldat = posdat; speeddat = veldat;
+%    for ibin = 1:max(lapindb)          
+%        posdat(ibin,1) = mean(posdat1(lapindb==ibin));
+%        veldat(ibin,1) = mean(veldat1(lapindb==ibin));
+%        speeddat(ibin,1) = mean(speeddat1(lapindb==ibin));
+%    end
+%    timedat = [length(lapind)/60:-binsize:0];
+%    if length(timedat)==length(posdat)
+%         timerevdat = [0:binsize:length(lapind)/60];              
+%    else
+%        timedat = [length(lapind)/60:-binsize:binsize];
+%        timerevdat = [binsize:binsize:length(lapind)/60];
+%    end
+
+    posdat1 = 100-linposcat(lapind);
+    laparm = armpos(lapind);
+    firstarm = laparm(1);
+    posdat1(laparm==firstarm) = linposcat(lapind(laparm==firstarm))+max(posdat1);
+
+
+   %proportion of the way to reward
+   propdat1 = (posdat1-min(posdat1))./(range(posdat1));      
+   veldat1 = diff(posdat1)*60;   
+   veldat1 = [veldat1;veldat1(end)];
+   veldat1 = -smoothts(veldat1,'g',15);
+   speeddat1 = abs(veldat1);
+
+   
+   
+   %acceleration
+   accdat1 = diff(speeddat1)*60;   
+   accdat1 = [veldat1;veldat1(end)];
+   
+   posdat = NaN(max(lapindb),1); propdat = posdat;
+   veldat = posdat; speeddat = veldat; accdat = veldat;
+   for ibin = 1:max(lapindb)          
+       posdat(ibin,1) = mean(posdat1(lapindb==ibin));
+       veldat(ibin,1) = mean(veldat1(lapindb==ibin));
+       accdat(ibin,1) = mean(accdat1(lapindb==ibin));
+       propdat(ibin,1) = mean(propdat1(lapindb==ibin));
+       speeddat(ibin,1) = mean(speeddat1(lapindb==ibin));
+   end
+
+
+   laptime(ilap,1) = length(lapind)/60;
+   
+   s = spks(ismember(spks(:,3), lapind),1:2);
+   [~,~,i] = histcounts(s(:,1),pos(lapind(1),1):binsize:pos(lapind(end),1));
+   fr = zeros(max(lapindb),length(other_cells));
+   
+   for icell = 1:length(other_cells)
+       if sum(s(:,2)==other_cells(icell))>0
+          fr(:,icell) = histc(i(s(:,2)==other_cells(icell)),1:max(lapindb));
+       end
+   end
+   if length(veldat) ~= length(timedat)
+       disp('problem')
+   end
+   lap_veldat = cat(1,lap_veldat,veldat);
+   lap_accdat = cat(1,lap_accdat,accdat);
+   lap_posdat = cat(1,lap_posdat,posdat);
+   lap_speeddat = cat(1,lap_speeddat,speeddat);
+   lap_propdat = cat(1,lap_propdat,propdat);
+   lap_timedat = cat(1,lap_timedat,timedat');
+   lap_timerev = cat(1,lap_timerev,timerevdat');
+   lap_fr = cat(1,lap_fr,fr);
+   lapnum = cat(1,lapnum,ones(length(timedat),1)*ilap);
+end
+
+% del = find(laptime>20);
+% lap_veldat(ismember(lapnum,del)) = [];
+% lap_posdat(ismember(lapnum,del)) = [];
+% lap_speeddat(ismember(lapnum,del)) = [];
+% lap_timedat(ismember(lapnum,del)) = [];
+% lap_timerev(ismember(lapnum,del)) = [];
+% lap_fr(ismember(lapnum,del),:) = [];
+
+
+    
+bt = fitlm(lap_fr,lap_speeddat);
+RsS2 = bt.Rsquared.Ordinary;
+bv = fitlm(lap_fr,lap_veldat);
+RsV2 = bv.Rsquared.Ordinary;
+bt = fitlm(lap_fr,lap_posdat);
+RsP2 = bt.Rsquared.Ordinary;
+bt1 = fitlm(lap_fr,lap_timerev);
+RsTrev2 = bt1.Rsquared.Ordinary;
+
+bt = fitlm(lap_fr,lap_timedat);
+RsT2 = bt.Rsquared.Ordinary;
+
+coeff = table2array(bt1.Coefficients(:,3));
+coeff = coeff(2:end);
+
+n = floor(max(lapnum)/2);
+m = max(lapnum)+1-n;
+B1 = fitlm(lap_fr(lapnum<=n,:),lap_timerev(lapnum<=n));
+R1 = B1.Rsquared.Ordinary;
+B2 = fitlm(lap_fr(lapnum>=m,:),lap_timerev(lapnum>=m));
+R2 = B2.Rsquared.Ordinary;
+
+coeff1 = table2array(B1.Coefficients(:,1));
+coeff1 = coeff1(2:end);
+coeff2 = table2array(B2.Coefficients(:,1));
+coeff2 = coeff2(2:end);
+
+if 0    
+% [~,b] = max(lap_fr(lapnum==1,:));
+% [~,ord] = sort(b);
+h = histc(lapnum,1:max(lapnum));
+[~,ord] = sort(h);
+sigma = 3;
+for icell = 1:size(lap_fr,2)
+    dat = NaN(max(lapnum),max(h),size(lap_fr,2));
+    for ilap = 1:max(lapnum)
+%         subplot(max(lapnum),1,ilap)
+        dat1 = lap_fr(lapnum==ilap,icell);
+        sz = length(dat1); x = linspace(-sz / 2, sz / 2, sz);
+        gaussFilter = exp(-x .^ 2 / (2 * sigma ^ 2)); gaussFilter = gaussFilter / sum (gaussFilter);
+        dat(ilap,(max(h)-(sum(lapnum==ilap)-1)):max(h),icell) = conv(dat1,gaussFilter,'same');
+%         patch([1:length(dat) length(dat):-1:1],[zeros(1,size(dat,1)) dat(end:-1:1)'],'k')
+%         xlim([1 max(h)])
+%         axis off
+    end
+    figure; hold on;
+    subplot(3,1,[1 2])
+    imAlpha = ~isnan(dat(ord,:,icell));
+    ii = imagesc(dat(ord,:,icell)./repmat(nanmax(dat(ord,:,icell),[],2),[1 size(dat,2)]),[.3 1]);
+    ii.AlphaData =imAlpha;
+    xlim([1 size(dat,2)])
+    ylabel('Lap (ordered by duration)')
+    xlabel('Timebin')
+    title(['Cell ' num2str(other_cells(icell))])
+    subplot(3,1,3)
+    ll = patch([1:size(dat,2) size(dat,2):-1:1],[(nanmean(dat(:,:,icell),1)) zeros(1,size(dat,2))],'k');
+    xlim([1 size(dat,2)])
+    legend(ll,['coeff: ' num2str(round(table2array(bt.Coefficients(icell+1,1)),2,'significant'))])
+    xlabel('Timebin')
+    ylabel('Average FR')
+    helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\CompLinearModels\' dirname '_Cell' num2str(other_cells(icell))])
+end
+
+end   
+      
+num_shuffles = 10;
+num_folds = 10;
+% errorT = NaN(num_folds,num_shuffles,floor(length(lap_veldat)/num_folds));
+errorT = [];
+errorTS = errorT;
+errorV = errorT; errorTSrev = [];
+errorVS = errorT; errorTrev = [];
+RallT = []; 
+% RallTrev = [];
+RallV = []; RallTrev = [];
+RallS = [];
+RallP = [];
+for j = 1:num_shuffles
+    indices = crossvalind('Kfold',length(lap_veldat),num_folds); 
+    for i = 1:num_folds
+        test = (indices == i); train = ~test;
+
+%          b = glmfit(lap_fr(train,:),lap_timedat(train),'gamma');
+%          f = glmval(b,lap_fr(test,:),'reciprocal');
+         
+         b = fitlm(lap_fr(train,:),lap_timedat(train));
+         f = predict(b,lap_fr(test,:));
+         errorT = cat(1,errorT,range([f lap_timedat(test)],2));
+         RallT = cat(1,RallT,corr(f,lap_timedat(test)).^2);
+         
+         b = fitlm(lap_fr(train,:),lap_timerev(train));
+         f = predict(b,lap_fr(test,:));
+         RallTrev = cat(1,RallTrev,corr(f,lap_timerev(test)).^2);
+         errorTrev = cat(1,errorTrev,range([f lap_timerev(test)],2));
+         
+         ss = randperm(length(train));
+         b = fitlm(lap_fr(train,:),lap_timedat(train(ss)));
+         f = predict(b,lap_fr(test,:));
+         errorTS = cat(1,errorTS,range([f lap_timedat(test)],2));
+         
+         b = fitlm(lap_fr(train,:),lap_timerev(train(ss)));
+         f = predict(b,lap_fr(test,:));
+         errorTSrev = cat(1,errorTSrev,range([f lap_timerev(test)],2));
+         
+         
+         b = fitlm(lap_fr(train,:),lap_accdat(train));
+         f = predict(b,lap_fr(test,:));
+         RallA = cat(1,RallA,corr(f,lap_accdat(test)).^2);
+         
+         b = fitlm(lap_fr(train,:),lap_propdat(train));
+         f = predict(b,lap_fr(test,:));
+         RallProp = cat(1,RallProp,corr(f,lap_propdat(test)).^2);
+         
+         b = fitlm(lap_fr(train,:),lap_veldat(train));
+         f = predict(b,lap_fr(test,:));
+%          errorV = cat(1,errorV,range([f lap_veldat(test)],2));
+         RallV = cat(1,RallV,corr(f,lap_veldat(test)).^2);
+         
+           b = fitlm(lap_fr(train,:),lap_speeddat(train));
+         f = predict(b,lap_fr(test,:));
+%          error = cat(1,errorV,range([f lap_veldat(test)],2));
+         RallS = cat(1,RallS,corr(f,lap_speeddat(test)).^2);
+         
+           b = fitlm(lap_fr(train,:),lap_posdat(train));
+         f = predict(b,lap_fr(test,:));
+         errorV = cat(1,errorV,range([f lap_veldat(test)],2));
+         RallP = cat(1,RallP,corr(f,lap_posdat(test)).^2);
+         
+         
+         b = fitlm(lap_fr(train,:),lap_veldat(train(ss)));
+         f = predict(b,lap_fr(test,:));
+         errorVS = cat(1,errorVS,range([f lap_veldat(test)],2));
+    end
+end
+[pTrev,~] = signrank(errorTrev,errorTSrev,'tail','left');
+[pT,~] = signrank(errorT,errorTS,'tail','left');
+[pV,~] = signrank(errorV,errorVS,'tail','left');
+
+end   
+% figure; hold on
+% cdfplot(errorT), 
+% cdfplot(errorTS), 
+% cdfplot(errorV), 
+% cdfplot(errorVS), 
+% legend({'Time to Reward';'Time to Reward Shuffle';'Speed';'Speed Shuffle'})
+
+
+
+% figure; hold on
+% [x1,h1] = cdfplot(errorT);
+% [x2,h2] = cdfplot(errorTS);
+% legend({'Time to Reward';'Time to Reward Shuffle'},'Location','Best')
+% % [p,h] = signrank(errorT,errorTS,'tail','left')
+% %%
+% figure; hold on
+% cdfplot(errorV), 
+% cdfplot(errorVS), 
+% legend({'Speed';'Speed Shuffle'})

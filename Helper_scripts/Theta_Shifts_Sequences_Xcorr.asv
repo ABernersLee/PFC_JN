@@ -1,0 +1,286 @@
+function [times_armon_thetaof_headingarm_lap_thetahalf_all,armsig_mx] =  Theta_Shifts_Sequences_Xcorr(thisdir,SpeedCutoff,exampleplots,otherplots,savefolder)
+disp('Start Theta_Shifts_Sequences_Xcorr')
+%formerly make_Theta_Seq_forXWdat, then prospective_theta
+
+
+%%%%%%%%%Gets theta out and calculates "global theta" (saves figs to show this)
+
+load(thisdir,'HP_Theta','vel')
+theta = HP_Theta; 
+if ~isfolder([savefolder '\Theta\'])
+    mkdir([savefolder '\Theta\'])
+end
+load(thisdir,'hp_cells','hpinterneurons','spikedata')
+hpcells = hp_cells(~ismember(hp_cells,hpinterneurons));
+spikedata = spikedata(ismember(spikedata(:,2),hpcells),:);
+spikedata1 = spikedata(vel(spikedata(:,3))>=SpeedCutoff,1);
+
+[~,c] = histc(spikedata1,theta(:,1));
+
+[h,cc] = hist(theta(c(c~=0),4),1:2:360);
+% [~,mm] = max(h);
+test = smoothts([h h h],'b',10);
+smthed = test(size(h,2)+1:size(h,2)*2);
+[~,mm] = max(smthed);
+mx = cc(mm);
+
+if otherplots
+    figure; hold on
+    hist(theta(c(c~=0),4),180);
+    plot(cc,smthed,'g','LineWidth',3)
+    yl = get(gca,'ylim');
+    plot([mx mx],yl,'k-','LineWidth',3)
+    text(mx*1.01,yl(2)*.99,num2str(mx))
+    title(['HP population activity to HP theta ' num2str(thisdir(1:end-4))])
+    helper_saveandclosefig([savefolder '\Theta\HPpopulationactivity_' num2str(thisdir(1:end-4))])
+end
+
+% ind = find(theta(:,4)>358 & theta(:,4)<360);
+if mx<3
+    ind = find(theta(:,4)>mod((mx-2),360) | theta(:,4)<mx);
+else
+    ind = find(theta(:,4)>mod((mx-2),360) & theta(:,4)<mx);
+end
+ind(diff(ind)==1) = [];
+anglechange = theta(ind,1);
+as = [anglechange(1:end-1) anglechange(2:end)];
+ind2 = (as(:,2)-as(:,1))<.1 | (as(:,2)-as(:,1))>.2;    
+as(ind2,:) = [];  
+achange = as;    
+
+%save out if going to use again
+HP_Theta_globalzero = HP_Theta;
+HP_Theta_globalzero(:,4) = mod(HP_Theta_globalzero(:,4)-mx,360);
+theta_globalzero = mx;
+% save(thisdir,'HP_Theta_globalzero','theta_globalzero','-append')
+
+%NOW adjusted to "global zero"
+theta = HP_Theta_globalzero;
+
+if otherplots
+    [h,cc] = hist(theta(c(c~=0),4),1:2:360);
+    test = smoothts([h h h],'b',10);
+    smthed = test(size(h,2)+1:size(h,2)*2);
+%     [~,mm] = max(smthed);
+%     mx = cc(mm);
+    figure; hold on
+    hist(theta(c(c~=0),4),180);
+    plot(cc,smthed,'g','LineWidth',3)
+    yl = get(gca,'ylim');
+%     plot([mx mx],yl,'k-','LineWidth',3)
+%     text(mx*1.01,yl(2)*.99,num2str(mx))
+    title(['Adjusted to global zero ' num2str(thisdir(1:end-4))])
+    helper_saveandclosefig([savefolder '\Theta\HPpopulationactivity_adjusted_' num2str(thisdir(1:end-4))])
+end
+
+
+
+%%%%%%%% gets lap by lap theta cycles heading in and out
+
+load(thisdir,'vel','behave_change_log','laps_singlepass','armpos','pos','armposindex','dirdat','binpos','RP_CandEventTimes')
+excl = false(size(pos,1),1);
+for icd = 1:size(RP_CandEventTimes(:,1))
+    excl = excl | (pos(:,1)>=RP_CandEventTimes(icd,1) & pos(:,1)<=RP_CandEventTimes(icd,2));
+end
+
+[~,armp] = max(armposindex,[],2); 
+lappro = NaN(size(laps_singlepass,1),3);
+lapout = NaN(size(laps_singlepass,1),2);
+% lapdir = NaN(size(laps_singlepass,1),1);
+for ilap = 1:max(laps_singlepass)
+   leave = find(behave_change_log(:,5) & laps_singlepass == ilap,1,'first'); %1 leave middle 5 leave platform
+   lapind = leave:find(behave_change_log(:,6) & laps_singlepass == ilap,1,'first')-1; % 6 is arrive middle      
+   lapout1 = find(behave_change_log(:,1) & laps_singlepass == ilap,1,'first'):find(behave_change_log(:,2) & laps_singlepass == ilap,1,'first'); % 2 is arrive platform
+   
+   nextarm = armpos(find(laps_singlepass == ilap,1,'last'));
+   thisarm = armpos(find(laps_singlepass == ilap,1,'first'));
+   lappro(lapind,:) = [ilap*ones(length(lapind),1) thisarm*ones(length(lapind),1) nextarm*ones(length(lapind),1)];
+   lapout(lapout1,:) = [ilap*ones(length(lapout1),1) nextarm*ones(length(lapout1),1)];
+end
+lappro(vel<SpeedCutoff | dirdat==1 | excl==1,:) = NaN; %dirdat in is 0, out is 1
+lapout(vel<SpeedCutoff | dirdat==0 | excl==1,:) = NaN; %getting rid of high velocity and ripple periods
+
+
+[~,~,i2] = histcounts(achange(:,1),pos(:,1));
+achange(i2==0,:) = [];
+i2(i2==0) = [];
+ind = [i2(1:end-1)+1 i2(2:end)];
+ind = [ind; ind(end)+1 size(pos,1)];
+
+
+
+prospectivecycles = NaN(size(achange,1),3);
+outcycle = NaN(size(achange,1),2);
+currpos = NaN(size(achange,1),1);
+for itheta = 1:size(achange,1)
+    prospectivecycles(itheta,:) = mode(lappro(ind(itheta,1):ind(itheta,2),:));
+    currpos(itheta,:) = binpos(ind(itheta,1),1);
+    outcycle(itheta,:) = mode(lapout(ind(itheta,1):ind(itheta,2),:));
+end
+
+torun = ~isnan(outcycle(:,1)) | ~isnan(prospectivecycles(:,1)); 
+ach = achange(torun,:);
+oc = outcycle(torun,:);
+pc = prospectivecycles(torun,:); %lap and arm
+curp = currpos(torun,:);
+
+%%%%%%%%% makes theta sequence figures and calculates shift to center
+%%%%%%%%% sequence (figures for average theta sequence and shifted theta
+%%%%%%%%% sequence)
+EstBin = .02;
+%did it individually, or all together
+% shift = draft_thetaseq_again(thisdir,ach,armposindex,curp,oc,pc,otherplots,savefolder,EstBin);
+% theta_sequence_zero = shift;
+
+load(['E:\XY_matdata\AllDays\matfiles\theta_sequence_zero.mat'],'theta_sequence_zero')
+
+
+HP_Theta_globalzero2 = theta;
+% HP_Theta_globalzero2(:,4) = mod(HP_Theta_globalzero2(:,4)+shift,360); % 4/2/19 ABL realized this should be - not +
+HP_Theta_globalzero2(:,4) = mod(HP_Theta_globalzero2(:,4)-theta_sequence_zero,360);
+
+%%%%%%%%% makes cross-covarence for each pfc cell, with all hp spikes or a
+%%%%%%%%% just spikes from the second half of the sequence or first half of
+%%%%%%%%% the sequence (saves figures for each cell and a zscored average
+%%%%%%%%% for each day)
+% armsig_mx = crosscov_thetatimes(HP_Theta_globalzero2,thisdir,otherplots,SpeedCutoff);
+
+%%%%%%%%% changing theta timings to centered on the sequence
+
+ind = find(HP_Theta_globalzero2(:,4)>358 & HP_Theta_globalzero2(:,4)<360);
+ind(diff(ind)==1) = [];
+anglechange = theta(ind,1);
+as = [anglechange(1:end-1) anglechange(2:end)];
+ind2 = (as(:,2)-as(:,1))<.1 | (as(:,2)-as(:,1))>.2;    
+as(ind2,:) = [];  
+achange = as;    
+
+[~,~,i2] = histcounts(achange(:,1),pos(:,1));
+achange(i2==0,:) = [];
+i2(i2==0) = [];
+ind = [i2(1:end-1)+1 i2(2:end)];
+ind = [ind; ind(end)+1 size(pos,1)];
+
+
+prospectivecycles = NaN(size(achange,1),3);
+outcycle = NaN(size(achange,1),2);
+currpos = NaN(size(achange,1),1);
+for itheta = 1:size(achange,1)
+    prospectivecycles(itheta,:) = mean(lappro(ind(itheta,1):ind(itheta,2),:)); % new 4/22/19 was mode
+    currpos(itheta,:) = binpos(ind(itheta,1),1);
+    outcycle(itheta,:) = mean(lapout(ind(itheta,1):ind(itheta,2),:)); % new 4/22/19 was mode
+end
+
+torun = ~isnan(outcycle(:,1)) | ~isnan(prospectivecycles(:,1)); 
+ach = achange(torun,:);
+pc = prospectivecycles(torun,:); %lap and arm
+
+
+%%%%%%%%% gets non-local theta sequences (using global zero here) and adds
+%%%%%%%%% to matrix with information about when and where they happen
+
+[MatIn,MatOut,Index,binspike] = make_PosteriorfromThetaCandEvents(thisdir,[ach(:,1)-EstBin/2 ach(:,2)+EstBin/2],EstBin); % 4/22/19 changed to directional decoding
+
+MatIn(:,sum(binspike>0)<2) = NaN; % new 4/22/19 need to have at least 2 cells spiking in a 20 ms bin for that position to be considered, 
+MatOut(:,sum(binspike>0)<2) = NaN; % 
+
+rat = NaN(size(ach,1),3);
+for c = 1:size(ach,1)
+    Ind = 4*Index(c)+1:4*Index(c+1)-3;
+    b = binspike(:,Ind);
+    rat(c,2) = sum(sum(b,2)>0); 
+    
+    if ~isnan(pc(c,2)) && rat(c,2)>4 %have to have at least 5 cells firing in that theta cycle
+        currarm = pc(c,2);
+        Mat = MatOut(:,Ind);
+        Mat(armp==currarm,:) = MatIn(armp==currarm,Ind);
+        Mat = Mat./(ones(size(Mat,1),1)*sum(Mat,1));
+        sumarm = NaN(3,1);
+        for iarm = 1:3            
+%             sumarm(iarm)= nansum(nansum(Mat(armp==iarm,Ind)./(sum(armp==iarm)/length(armp))));
+            sumarm(iarm)= nansum(nansum(Mat(armp==iarm,:)./(sum(armp==iarm)/length(armp))));
+        end
+        sa = sumarm;
+        sumarm(pc(c,2)) = NaN;
+        if length(unique(sumarm(~isnan(sumarm))))==1
+            disp('no max')
+            continue
+        end
+        [~,inda] = max(sumarm);
+    %     [~,indi] = min(sumarm);
+        rat(c,1) = (sumarm(inda)/sum(sa));    
+        rat(c,3) = inda;
+        
+        midp = NaN(length(Ind),1);
+        midp(1:floor(length(Ind)/2)) = 1;
+        midp(ceil(length(Ind)/2)+1:end) = 0;
+        midp2 = circshift(midp,-round((theta_sequence_zero*(length(Ind)/360))));        
+        sumarm2 = NaN(3,2);
+        for iarm = 1:3               
+            sumarm2(iarm,1)= (nansum(nansum(Mat(armp==iarm,midp==1)./(sum(armp==iarm)/length(armp)))))./sum(midp==1);
+            sumarm2(iarm,2)= (nansum(nansum(Mat(armp==iarm,midp==0)./(sum(armp==iarm)/length(armp)))))./sum(midp==0);
+        end
+        sumarm3 = sumarm2(inda,:)./sum(sumarm2,1);
+        if length(unique(sumarm3))>1; [~,b] = max(sumarm3); else; b = NaN; end
+        rat(c,4) = b;
+        sumarm2 = NaN(3,2);
+        for iarm = 1:3               
+            sumarm2(iarm,1)= (nansum(nansum(Mat(armp==iarm,midp2==1)./(sum(armp==iarm)/length(armp)))))./sum(midp2==1);
+            sumarm2(iarm,2)= (nansum(nansum(Mat(armp==iarm,midp2==0)./(sum(armp==iarm)/length(armp)))))./sum(midp2==0);
+        end
+        sumarm3 = sumarm2(inda,:)./sum(sumarm2,1);
+        if length(unique(sumarm3))>1; [~,b2] = max(sumarm3); else; b = NaN; end
+        rat(c,5) = b2;
+        
+        if c==249 && exampleplots    %rat(c,1)>.6  
+            c1 = find(achange(:,1)==ach(c,1));
+            windn = 13;
+            [~,~,i]= histcounts(mean(achange(c1-windn:c1+windn,:),2),pos(:,1));
+%             [Mat2,Index2,~] = make_PosteriorfromThetaCandEvents(thisdir,achange(c1-20:c1+20,:));
+            [Mat2In,Mat2Out,Index2,~] = make_PosteriorfromThetaCandEvents(thisdir,achange(c1-windn:c1+windn,:),EstBin);
+            Mat2 = Mat2Out;
+            Mat2(armp==currarm,:) = Mat2In(armp==currarm,:);
+            Mat2 = Mat2./(ones(size(Mat2,1),1)*sum(Mat2,1));
+            Mat3 = cat(1,Mat2(armposindex(:,3),:),Mat2(armposindex(:,2),:),Mat2(armposindex(:,1),:));
+            figure; imagesc(Mat3); colormap gray; axis xy; hold on
+            cm = colormap;
+            size(cm)
+            cm2 = cm(end:-1:1,:);
+            set(gca,'colormap',cm2)
+            plot([4*Index2(windn+1)+1 4*Index2(windn+1)+1],[0 163],'r-','LineWidth',3)
+            plot([4*Index2(windn+2) 4*Index2(windn+2)],[0 163],'r-','LineWidth',3)
+%             text(4*Index2(windn+3),150,num2str(inda),'Color','r','FontSize',18)
+            plot(Index2(1:end-1)*4,binpos(i)+sum(armposindex(:,2))+sum(armposindex(:,3)),'r*')            
+%             xt = get(gca,'xtick');
+%             set(gca,'xticklabel',(xt*5)/1000)
+            xtimes = achange(c1-20:c1+20,1)-achange(c1-20,1);
+            set(gca,'xtick',Index2(2:4:end)*4,'xticklabel',round(xtimes(1:4:end),2,'significant'))
+            set(gca,'clim',[.01 .15])
+            xlabel('Time (Seconds)')
+            ylabel('Binned Position')
+            set(gca,'FontSize',18)
+            set(gcf,'Position',[ 1921         -79        1600        1083])
+            helper_saveandclosefig([savefolder '\Theta\Example249specific_' num2str(thisdir(1:end-4)) '_' num2str(c)])
+        end
+    end
+end
+
+% ind = find(rat(:,1)>cutoff);
+% ttimes = ach(ind,:);
+% tprosp = rat(ind,3);
+% tarmon = pc(ind,2);
+% theadarm = pc(ind,3);
+% tlap = pc(ind,1);
+% times_armon_thetaof_headingarm_lap = [ttimes tarmon tprosp theadarm tlap rat(ind,4) rat(ind,5)]; % added which half of the theta cycle the representation was strongest
+times_armon_thetaof_headingarm_lap_thetahalf_all = [ach pc(:,2) rat(:,3) pc(:,3) pc(:,1) rat(:,4) rat(:,5) rat(:,1)]; % added which half of the theta cycle the representation was strongest
+% use this to then see if the theta sweeps predict the behavior
+
+disp('Half Theta Seq:')
+[sum(rat(~isnan(rat(:,1)),4)==2)./sum(rat(~isnan(rat(:,1)),4)==1) sum(rat(rat(:,1)>.34,4)==2)./sum(rat(rat(:,1)>.34,4)==1)]
+disp('Half Global Zero:')
+[sum(rat(~isnan(rat(:,1)),5)==2)./sum(rat(~isnan(rat(:,1)),5)==1) sum(rat(rat(:,1)>.34,5)==2)./sum(rat(rat(:,1)>.34,5)==1)]
+
+
+
+save(thisdir,'theta_globalzero','times_armon_thetaof_headingarm_lap_thetahalf_all','-append');
+disp('Done with Theta_Shifts_Sequences_Xcorr')

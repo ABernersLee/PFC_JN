@@ -1,0 +1,308 @@
+function ThetaCycleHalf_pfc_SummaryFigs(dirs,savelab,igroup,savefolder,globe)
+%ThetaCycleHalf_pfc_SummaryFigs
+% on sequence theta
+cd(dirs.homedir)
+d2 = dir('*.mat');
+aa = []; ss= []; aa2 = []; rp = [];
+
+if globe == 1
+    savelab = [savelab '_GlobalZero'];
+elseif globe == 2
+    savelab = [savelab '_SequenceZero'];
+end
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;        
+    if globe == 1
+        load(thisdir,'armsig_mx_GlobalZero2','RP_SSDarm','other_cells_touse','RP_Cand_sig_modu_include')  
+        armsig_mx = armsig_mx_GlobalZero2;     %4   
+    elseif globe == 2
+        load(thisdir,'armsig_mx_SequenceZero2','RP_SSDarm','other_cells_touse','RP_Cand_sig_modu_include')
+        armsig_mx = armsig_mx_SequenceZero2; %4        
+    end
+    armsig_mx = armsig_mx(other_cells_touse(:,igroup),:);
+    RP_SSDarm = RP_SSDarm(other_cells_touse(:,igroup),:);
+    CandSigModu = RP_Cand_sig_modu_include(other_cells_touse(:,igroup),2);
+    
+    aa = [aa;armsig_mx(:,[7:8]) RP_SSDarm]; %to be consistent with figure 4, change this (figure 5) to RP_SSDarm (from RP_SSDarm2) on 9/26/2020
+    aa2 = [aa2;armsig_mx];
+    rp = [rp;CandSigModu];
+    ss = [ss;armsig_mx(:,1)];
+end
+    %%
+
+siglab = {'All Cells';'Sig ArmMod Cells'};
+for isig = 1:2
+    figure; hold on
+    if isig==1
+        ind = true(size(ss));
+    elseif isig == 2
+        ind = ss<.05;
+    end
+    violins = violinplot1([aa(ind,1) aa(ind,2)]);
+    violins(1).ViolinColor = 'k'; 
+    violins(1).EdgeColor = 'k'; 
+    violins(1).MedianColor = 'k';
+    violins(2).ViolinColor = 'k'; 
+    violins(2).EdgeColor = 'k'; 
+    violins(2).MedianColor = 'k';
+%     for ihalf = 1:2
+%         plot(ihalf,aa(ind,ihalf),'+','MarkerEdgeColor',[.5 .5 .5],'MarkerSize',20)
+%         errorbar(ihalf,mean(aa(ind,ihalf)),std(aa(ind,ihalf))./sqrt(sum(ind)),'k','LineWidth',3)
+%     end
+%     plot((ones(sum(ind),1)*[1 2])',aa(ind,:)','k')
+    p = signrank(aa(ind,1),aa(ind,2));
+    if p<.05
+        yl = get(gca,'ylim');
+        plot([1 2],[yl(2)*1.1 yl(2)*1.1],'k')
+        plot(1.5,yl(2)*1.15,'r*','MarkerSize',10)
+    end
+%     ylim([yl(1) yl(2)*1.2])
+    xlim([.7 2.3])
+    title([siglab{isig} ' p = ' num2str(p)])
+    set(gca,'xtick',1:2,'xticklabel',{'First Half';'Second Half'})
+    set(gca,'FontSize',18)
+    ylabel('mPFC-HP Cross-Covariance for each mPFC cell')
+    set(gcf,'Position',[680   384   795   594])
+    helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_SummaryFigs_' siglab{isig} '_' savelab])
+    
+    
+      figure; hold on
+    if isig==1
+        ind = true(size(ss));
+    elseif isig == 2
+        ind = ss<.05;
+    end
+    for ii = 1:2
+        bar(ii,nanmean(aa(ind,ii)),'w','EdgeColor','k')
+        errorbar(ii,nanmean(aa(ind,ii)),nanstd(aa(ind,ii))./sqrt(sum(~isnan(aa(ind,ii)))),'k','LineWidth',3)
+    end
+    
+
+    p = signrank(aa(ind,1),aa(ind,2));
+    if p<.05
+        yl = get(gca,'ylim');
+        xl = get(gca,'xlim');
+        plot([1 2],[yl(2)*1.1 yl(2)*1.1],'k')
+        plot(xl(1)*1.15,yl(2)*1.15,'r*','MarkerSize',10)
+    end
+%     ylim([yl(1) yl(2)*1.2])
+    xlim([.5 2.5])
+    title([siglab{isig} ' p = ' num2str(p)])
+    set(gca,'xtick',1:2,'xticklabel',{'First Half';'Second Half'})
+    set(gca,'FontSize',18)
+    ylabel('mPFC-HP Cross-Covariance for each mPFC cell')
+    set(gcf,'Position',[680   384   795   594])
+    helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_SummaryFigsbar_' siglab{isig} '_' savelab])
+end
+    
+    
+    %% is the change in FR of each cell to different diff halves of theta cycles in hp related to whether it gets arm input? yes
+% pcells = []; celldat = [];
+% for id = 1:size(d2,1)
+%     thisdir = d2(id).name;
+%     load(thisdir,'prospectiveTheta_pcells','prospectiveTheta_celldat')
+%     pcells = cat(1,pcells,prospectiveTheta_pcells);
+%     if ~isempty(celldat)
+%         celldat = cat(2,celldat,squeeze(nanmean(prospectiveTheta_celldat,1)));
+%     end
+% end
+% celldatdiff = abs(diff(celldat,[],1))./sum(celldat);
+% diffperc = celldatdiff';
+
+touse = true(size(aa,1),1); %armsig(:,5)==1;
+armsig2 = aa2(touse,:);
+rp2 = rp(touse,:);
+diffdat = (aa(touse,2)-aa(touse,1)); %./sum(aa(touse,1:2),2); %,[],2); %,2);
+
+figure; hold on;
+set(gcf,'Position',[ 2073         146        1202         744])
+subplot(3,1,1), hold on
+h(1) = histogram(diffdat(armsig2(:,1)>=.05),20,'Normalization','probability');
+h(2) = histogram(diffdat(armsig2(:,1)<.05),20,'Normalization','probability');
+yl = get(gca,'ylim');
+plot([nanmedian(diffdat(armsig2(:,1)>=.05)) nanmedian(diffdat(armsig2(:,1)>=.05))],yl,'b-','LineWidth',3)
+plot([nanmedian(diffdat(armsig2(:,1)<.05)) nanmedian(diffdat(armsig2(:,1)<.05))],yl,'r-','LineWidth',3)
+
+p = ranksum(diffdat(armsig2(:,1)<.05),diffdat(armsig2(:,1)>=.05),'tail','right');
+legend(h,'Not Mod','Arm Mod')
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['p = ' num2str(round(p,2,'significant'))]);
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';
+end
+xlabel('2nd half theta cycle modulated')
+ylabel('Probability')
+set(gca,'FontSize',18)
+
+
+subplot(3,1,2)
+plot(armsig2(:,2),diffdat,'.k','MarkerSize',15)
+[r,p] = corr(armsig2(:,2),diffdat,'rows','complete');
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+if p<.05
+    tt.Color = 'r';
+    tt.FontSize = 14;
+end
+xlabel('armSSD')
+ylabel('2nd half theta cycle mod')
+set(gca,'FontSize',18)
+
+
+subplot(3,1,3)
+plot(log(armsig2(:,2)),diffdat,'.k','MarkerSize',15)
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';
+end
+
+[r,p] = corr(log(armsig2(:,2)),diffdat,'rows','complete');
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';
+end
+xlabel('log(armSSD)')
+ylabel('2nd half theta cycle mod')
+set(gca,'FontSize',18)
+set(gcf,'Position',[2028         -73         624        1064])
+helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_Vs_Armsig_' savelab])
+
+%%
+
+figure; hold on
+plot(log(armsig2(:,2)),diffdat,'.k','MarkerSize',20)
+x1 = [min(log(armsig2(:,2))) max(log(armsig2(:,2)))];
+incl = ~isnan(diffdat) & ~isnan(armsig2(:,2));
+b = polyfit(log(armsig2(incl,2)),diffdat(incl),1);
+y2 = polyval(b,x1);
+plot(x1,y2,'r','LineWidth',3)
+[r,p] = corr(armsig2(:,2),diffdat,'rows','complete');
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.2+yl(1),['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';    
+end
+[r,p] = corr(log(armsig2(:,2)),diffdat,'rows','complete');
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';    
+end
+xlabel('log(armSSD)')
+ylabel('Difference of modulation between 2nd and 1st half of theta cycle')
+set(gca,'FontSize',18)
+set(gcf,'Position',[ 2211          47        1087         796])
+helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_Vs_Armsig2_' savelab])
+
+%% factoring out the modulation to ripples
+
+[r2,p2] = partialcorr(armsig2(:,2),diffdat,abs(rp2),'rows','complete');
+rp22 = log(abs(rp2)); rp22(isinf(rp22)) = NaN;
+[r22,p22] = partialcorr(log(armsig2(:,2)),diffdat,rp22,'rows','complete');
+
+figure; hold on
+subplot(1,2,1); hold on
+plot(log(armsig2(:,2)),diffdat,'.k','MarkerSize',20)
+x1 = [min(log(armsig2(:,2))) max(log(armsig2(:,2)))];
+incl = ~isnan(diffdat) & ~isnan(armsig2(:,2));
+b = polyfit(log(armsig2(incl,2)),diffdat(incl),1);
+y2 = polyval(b,x1);
+plot(x1,y2,'r','LineWidth',3)
+[r,p] = corr(armsig2(:,2),diffdat,'rows','complete');
+
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.1+yl(1),['PartialCorr Lin, r = ' num2str(round(r2,2,'significant')) ' p = ' num2str(round(p2,2,'significant'))]);
+if p2<.05; tt.Color = 'r'; end;  tt.FontSize = 14;
+
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.2+yl(1),['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+
+tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';
+end
+
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.3+yl(1),['Partial CorrLog, r = ' num2str(round(r22,2,'significant')) ' p = ' num2str(round(p22,2,'significant'))]);
+if p22<.05; tt.Color = 'r'; end;  tt.FontSize = 14;
+
+[r,p] = corr(log(armsig2(:,2)),diffdat,'rows','complete');
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+
+    tt.FontSize = 14;
+if p<.05
+    tt.Color = 'r';
+end
+
+xlabel('log(armSSD)')
+ylabel('Difference of modulation between 2nd and 1st half of theta cycle')
+set(gca,'FontSize',18)
+
+subplot(1,2,2); hold on
+[r1,p1] = corr(abs(rp2),diffdat,'rows','complete');
+[r11,p11] = corr(rp22,diffdat,'rows','complete');
+
+plot(rp22,diffdat,'.k','MarkerSize',20)
+x1 = [min(rp22) max(rp22)];
+incl = ~isnan(diffdat) & ~isnan(rp22);
+b = polyfit(rp22(incl),diffdat(incl),1);
+y2 = polyval(b,x1);
+plot(x1,y2,'color',[.5 .5 .5],'LineWidth',3)
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.2+yl(1),['Lin, r = ' num2str(round(r1,2,'significant')) ' p = ' num2str(round(p1,2,'significant'))]);
+if p1<.05; tt.Color = 'r'; end;  tt.FontSize = 14;
+yl = get(gca,'ylim');
+xl = get(gca,'xlim');
+tt = text(range(xl)/2+xl(1),range(yl)/1.4+yl(1),['Log, r = ' num2str(round(r11,2,'significant')) ' p = ' num2str(round(p11,2,'significant'))]);
+if p11<.05; tt.Color = 'r'; end;  tt.FontSize = 14;
+
+xlabel('Ripple modulation')
+ylabel('Difference of modulation between 2nd and 1st half of theta cycle')
+set(gca,'FontSize',18)
+set(gcf,'Position',[   1761         123        1399         839])
+helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_Vs_Modu_ArmSig2_ParCorr_' savelab])
+
+%%
+
+
+
+
+% figure; hold on
+% plot(log(armsig2(:,3)),diffdat,'.k','MarkerSize',15)
+% x1 = [min(log(armsig2(:,3))) max(log(armsig2(:,3)))];
+% b = polyfit(log(armsig2(:,3)),diffdat,1);
+% y2 = polyval(b,x1);
+% plot(x1,y2,'r','LineWidth',3)
+% [r,p] = corr(armsig2(:,3),diffdat,'rows','complete');
+% tt = text(-5.5,.1,['Lin, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+% if p<.05
+%     tt.Color = 'r';
+%     tt.FontSize = 14;
+% end
+% [r,p] = corr(log(armsig2(:,2)),diffdat,'rows','complete');
+% tt = text(-5.5,.05,['Log, r = ' num2str(round(r,2,'significant')) ' p = ' num2str(round(p,2,'significant'))]);
+% if p<.05
+%     tt.Color = 'r';
+%     tt.FontSize = 14;
+% end
+% xlabel('log(normalized armSSD)')
+% ylabel('2nd half theta cycle mod')
+% set(gca,'FontSize',18)
+% set(gcf,'Position',[ 2211          47        1087         796])
+% helper_saveandclosefig([savefolder '\Theta\ThetaCycleHalf_pfc_Vs_Armsig3_normalized_' savelab])

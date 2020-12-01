@@ -1,0 +1,248 @@
+function RunAnalysis2(dirs)
+%old version
+cd(dirs.homedir)
+d2 = dir('*.mat');
+velcutoff = 5;
+num_shuffles = 5000;
+exampleplots = false; otherplots =false;
+replaylab = {'AllArmEvents';'Wc3ArmCov3';'WC4ArmCov5mj7';'WC5ArmCov5mj4'};
+ilab = 1; 
+grouplabels = {['AllCells_' replaylab{ilab}];['BestTTDays_' replaylab{ilab}];['BestDays_' replaylab{ilab}]};
+smoothsize = 30; withmodpatch = 1;
+std_cutoff = 2;
+cutoff = 0;
+igroup = 1;
+if ~isfolder(['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}])    
+    mkdir(['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}]) 
+end
+savefolder = ['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}];
+
+tic        
+for id = 6:size(d2,1)
+    try
+    thisdir = d2(id).name;     
+        
+    if 0
+    %make directional fields
+    make_directionalfields(thisdir,velcutoff,true,2);
+    
+    %make Theta and Ripple mat files 
+    make_HP_csc(dirs,thisdir)        
+
+    %make Ripple Candidate events
+    make_RPCandEvents_ripple(thisdir,std_cutoff)      
+    
+    %get theta phase for each spike
+    make_HPtheta_spikephase2(thisdir)
+    
+    %decode posterior of whole session
+    make_PosteriorfromCandEvents(thisdir,'RP')  
+        
+    %get replays from the posterior (using a modified version of XYW way)
+    make_singleandjointreplay_fromPosterior(thisdir,'RP',num_shuffles)   
+    
+    %make two matricies that are pfc cell firing triggered off of the
+    %replays identified in an easy to plot format
+    make_PFC_replayeventtriggeredmat(thisdir,'RP')   
+    
+    
+    %get significance of pfc cells being modulated by ripples
+    make_PFC_candeventtriggeredmat(thisdir,'RP')
+    
+    
+    %get the significance of differential modulation for each pfc cell
+    get_PFC_armtriggered_modusig(thisdir,'RP',ilab);     
+    
+    %plot the pfc cells triggered to different replays
+    plot_PFC_ArmReplay_triggered(thisdir,'RP',withmodpatch,smoothsize,savefolder,id)      
+    
+    %plot the expected pfc cells triggered to different replays
+    plot_PFC_ArmReplay_triggered_expected(thisdir,withmodpatch,smoothsize,savefolder,id,true);
+        
+    end
+    
+    %classify which arm is being replayed in hp with only pfc cells (and
+    %controls to account for time within session, position of rat, and ripple power)
+%     run_all_linear_classifiers(thisdir,'RP',1,id,true)        
+    
+     
+    %decodes theta sequences, adjusts theta to center around theta
+    %sequence, then identifies any non-local theta sweeps
+    Theta_Shifts_Sequences_Xcorr(thisdir,velcutoff,exampleplots,otherplots,savefolder);
+    
+    if 0
+    %make two matricies that are pfc cell firing triggered off of the
+    %non-local theta sweeps identified in an easy to plot format
+    make_PFC_thetaeventtriggeredmat(thisdir)
+    
+    
+    
+    %all four of these are to get out the variables for the armcombs, where
+    %I compare the pattern of firing across different measures (replay,
+    %non-local theta sweeps [100ms], prospective FR, and theta triggered firing [60ms])
+    prospective_pfcfwdreplays(thisdir,'RP',ilab)       
+    
+    prospective_FR(thisdir,velcutoff)   
+    end
+    
+    thetatrig_FR(thisdir)
+        
+    make_prospective_theta_triggered(thisdir,cutoff);                    
+    
+    if 0
+    %spatial preceition within replays
+    make_ArmReplay_triggered_spatialprecision(thisdir,'RP')       
+    
+
+    make_ArmReplay_triggered_spatialprecisiondir(thisdir,'RP')   
+    end
+    
+    t = toc;
+    disp(['!!! Done with Day ' num2str(id) ', finished in ' num2str(round(t/60,3,'significant')) ' minutes'])
+    tic
+     catch ME
+        disp(['ID: ' ME.identifier])    
+        msgString = getReport(ME);
+        disp(msgString)
+        disp(id)
+        disp('****************************************Error Occured')
+    end
+end
+
+if 0
+    make_other_cells_touse(dirs)
+    make_OpenPlaceFields(dirs)
+end
+
+%%%% Figures
+
+toplot = true; toplotcells = true; tosave = true;
+for igroup = 1:3    
+    if ~isfolder(['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}])    
+        mkdir(['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}]) 
+    end
+    savefolder = ['E:\XY_matdata\Figures\ForPaper\' grouplabels{igroup}];
+    
+    
+    %%%% Examples or other things that don't depend on stats of which cells to include
+    if igroup==1        
+        %Figure 1
+        Figure1_PlaceFields(dirs,savefolder)        
+        %Figure 2
+        Fig2_Examples(dirs,savefolder)
+        Figure2_ExpectedVsReal(savefolder)
+        %Figure 3        
+        Figure3_AverageThetaSequenceAcrossDays(dirs,savefolder)  
+        NonLocalSweeps_ThetaCycle_SummaryFigs(dirs,cutoff,savefolder) 
+        %Figure 4            
+        alldays_alldat_table(dirs,igroup,savefolder,toplot) % supplement, not good for saving
+    end
+    
+    %%%% Figure 2
+    ArmReplay_triggered_spatialprecision(dirs,igroup,savefolder) 
+    ArmReplay_triggered_spatialprecisiondir(dirs,igroup,savefolder)
+    
+    plot3PFC_arm_modulation('RP',igroup,savefolder)        
+    proportion_replay_modulated_all('RP','',igroup,savefolder)
+    
+%     if igroup~=2
+%         linear_classifier_of_replay_all('RP','Arm',1,'',igroup,savefolder)
+%         linear_classifier_of_replay_all_controls('RP','ArmControls_time','',igroup,savefolder)
+%         linear_classifier_of_replay_all_controls('RP','ArmControls_armpos','',igroup,savefolder)
+%         linear_classifier_of_replay_all_controls('RP','ArmControls_ripple','',igroup,savefolder) 
+%         linear_classifier_of_replay_all_controls('RP','ArmControls_replaylength','',igroup,savefolder)
+%     end
+    
+    %%%% Figure 3 
+%     - Theta sweeps
+    NonLocalThetaDifference_SummaryFigs(dirs,cutoff,'_LateMay',igroup,savefolder)        
+    if igroup==1        
+        crosscov_thetatimes(dirs,toplot,toplotcells,tosave,velcutoff,1,igroup,savefolder)      
+        crosscov_thetatimes(dirs,toplot,toplotcells,tosave,velcutoff,2,igroup,savefolder)    
+    end
+    ThetaCycleHalf_pfc_SummaryFigs(dirs,'_LateMay_100ms',igroup,savefolder,1)
+    ThetaCycleHalf_pfc_SummaryFigs(dirs,'_LateMay_100ms',igroup,savefolder,2)
+    
+%     - Replay vs Theta
+    ii = 3;         
+    plot_armcombs_relationship(dirs,'RP',ii,['_' num2str(cutoff) 'cutoff_LateMay_P'],1,igroup,savefolder)
+    plot_armcombs_relationship(dirs,'RP',ii,['_' num2str(cutoff) 'cutoff_LateMay_P'],2,igroup,savefolder)
+            
+%     - Internal Fields        %,toplot,toplotcells,tosave)
+
+    Figure3_Internal2d(dirs,igroup,savefolder,toplot,true,false)     % clean up, could also do some controls for direction and speed & could add Theta fields too                
+    if igroup == 1
+        Figure3_make_4sets_barplots(dirs,igroup,savefolder,toplot)
+    else
+        Figure3_make_4sets_barplots(dirs,igroup,savefolder,false)
+    end
+    
+    %%%% Figure 4 - choice
+    if igroup~=2
+        Theta_Sweeps_Predict_Future_Arm(dirs,cutoff,savefolder,[0 Inf],igroup) 
+        decode_choice_by_thetaphase_all(dirs,savefolder,true,igroup) % check it is what I want it to be (62.5ms vs 60ms)    
+    end
+        
+    %%%% Supplement
+    fwdvsrev_pfc_plot(dirs,igroup,savefolder)% currently Away is all starting on arm and going out, towards is any coming towards    
+    if igroup==1
+        Jadhav_Frank_Correlations_Ripple_PF(dirs,savefolder) % need to delete or change the name of the mat file to re-run
+    end
+    
+    
+%     armcombs_acrosspvals(dirs,cutoff,[replaylab{ilab} '_NewMay'],1)
+%     armcombs_acrosspvals(dirs,cutoff,[replaylab{ilab} '_NewMay'],2)
+
+end
+
+
+    
+% armacc = get_behavior_accuracy(thisdir);
+
+
+
+%%%% Old scripts that are doing not necessary things for the paper
+%%%% (currently), could be recruited ifneedbe
+
+% internal_fields_all
+% internal_fields_2d_all
+% Figure3_Internal1d
+% mpfc_thetasweeps_xcov_all
+% mpfc_hp_prediction_xcov
+% plot_MRVs(dirs)
+% make_PosteriorfromThetaCandEvents_manypluspfc(thisdir)
+% fwdvsrev_pfc_plot(dirs)
+% plot_Velocity_Vs_Value(label)
+% get_lapbylap_PFC(thisdir,'RP',3,velcutoff) %velcutoff was 10 here
+% prospective_jointreplays(thisdir,label,area,jointpart) %old, needs work if using     
+% decoding_jointreplays(thisdir,'RP',num_shuffles,num_hp_shuffles) %newer I think    
+% decoding_nextarm_usingFR(thisdir,num_shuffles,num_hp_shuffles,velcutoff)
+% plot_PFC_ArmTheta_triggered(thisdir,false,5,.34,false)    
+% plot_prospective_theta_modu(thisdir)
+% for timetrig = 1:2
+%     plot_PFC_JointReplay_triggered(thisdir,'RP',withmodpatch,smoothsize,timetrig)
+%     plot_PFC_JointReplay_triggered(thisdir,'SD',withmodpatch,smoothsize,timetrig)
+% end        
+% plot_PFC_ArmReplay_triggered_armon(thisdir,label,false,smoothsize)
+%  % only need to run parts of this
+% ThetaNonLocalLocal_20190509
+% decode_time_since_last_reward_by_thetaphase
+%get spike density events
+% make_SDCandEvents_spikedensity(thisdir,std_cutoff)         
+% make_PFC_candeventtriggeredmat(thisdir,'RP')    
+% plot_PFC_Event_triggered(thisdir,'RP',withmodpatch,smoothsize)    
+% make_HP_replayeventtriggeredmat(thisdir,'RP')    
+% plot_PFC_ArmReplay_triggered_spatialprecision(thisdir,'RP')         
+% plot_HP_ArmReplay_triggered_spatialprecision(thisdir,'RP')
+% Figure3_Internal_combo(dirs,igroup,savefolder) 
+
+
+%%%% Different ways of running the above day by day scripts
+% ripples_single_joint = NaN(size(d2,1),3,4);
+% load(thisdir,'RP_CandEventTimes')
+% ripples_single_joint(id,:,ilab) = [size(RP_CandEventTimes,1) single joint];
+% replaylab = {'AllArmEvents';'All.3Events';'AllSigEvents_ArmCov3_10_1000_1000';'All.3SigEvents';'All.5SigEvents';'All.5Events'}; 
+% replaylab = {'AllArmEvents';'All.3Events_armcov3';'AllSigEvents_ArmCov3';'All.3SigEventsArmcov5';'All.5SigEventsArmcov5'}; 
+% replaylab = {'AllArmEvents';'All.3Events';'All.3SigEvents';'All.3SigEvents_JD.7';'All.5SigEvents';'All.6SigEvents_JD.4'};
+% replaylab = {'Xiaojing_FromStart';'XW_but.3WC';'XW_but_armallevents'};
+%get required files and products from matlab file
