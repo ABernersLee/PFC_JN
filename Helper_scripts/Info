@@ -1,0 +1,5 @@
+Has all the helper scripts that the main functions call (plus more that they don't call).
+Except for:
+CircStat2012a package (Copyright (c) 2011, Philipp Berens)
+and
+Chronux version 2.11 (http://chronux.org/)
