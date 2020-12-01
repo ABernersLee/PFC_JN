@@ -1,0 +1,146 @@
+function [InFR,OutFR,binpos,armposindex] = make_directionalfields_heading(thisdir,VelThresh,Bin_Size)
+
+% VelThresh = 5;
+% Bin_Size = 2.5;
+% Bin_Size = 1.7; %was 2
+
+load(thisdir,'linposcat','armpos','spikedata','vel','dirdat','hp_cells','other_cells','hpinterneurons','laps_singlepass')
+Cell_Number = sort([hp_cells;other_cells]);
+
+Pos1 = linposcat;
+clear linposcat
+
+NumBin = zeros(max(armpos),1);
+for iarm = 1:max(armpos)    
+    dat = ceil(Pos1(armpos==iarm)/Bin_Size);
+    if min(dat)<=sum(NumBin)
+        dat = dat+1 + (sum(NumBin)-min(dat));
+    elseif min(dat)>(sum(NumBin)+1)
+        dat = dat-(min(dat)-(sum(NumBin)+1));
+    end
+    Pos1(armpos==iarm,1) =dat;
+    NumBin(iarm) = range(dat) +1;    
+end
+
+Number_Of_Bins = sum(NumBin);
+
+
+index = false(Number_Of_Bins,max(armpos));
+for iarm = 1:max(armpos)    
+    index(Pos1(armpos==iarm),iarm) = true;
+end
+
+
+if sum(sum(index,2)==0)>0
+    aa = NaN(Number_Of_Bins,1);
+    [x,y] = find(index==1);
+    aa(x) = y;
+    armpos2 = fillmissing(aa,'nearest');
+    for iarm = 1:max(armpos2)
+        index(armpos2==iarm,iarm) = true;
+    end
+end
+
+if sum(sum(index,2)~=1)>0    
+    error('bad arm positions')
+end
+
+
+thearms = NaN(size(laps_singlepass,1),2);
+for ilap = 1:max(laps_singlepass)
+   nextarm = armpos(find(laps_singlepass == ilap,1,'last'));
+   thisarm = armpos(find(laps_singlepass == ilap,1,'first'));
+   thearms(laps_singlepass==ilap,:) = ones(sum(laps_singlepass==ilap),1)*[thisarm nextarm];
+end
+% thearms(:,1) = fillmissing(thearms(:,1),'nearest');
+% thearms(:,2) = fillmissing(thearms(:,2),'nearest');
+
+Spike=[spikedata(:,2) spikedata(:,1) Pos1(spikedata(:,3)) vel(spikedata(:,3)) dirdat(spikedata(:,3)) armpos(spikedata(:,3)) thearms(spikedata(:,3),:)];
+% Cell_Number = unique(Spike(:,1));
+OutFR=NaN(max(Cell_Number),Number_Of_Bins,2);
+InFR=NaN(max(Cell_Number),Number_Of_Bins,2);    
+Filter=fspecial('gaussian',[1 20],3); % ref Davidson et.al. 2006
+% Filter=fspecial('gaussian',[1 20],4); % ref Davidson et.al. 2006
+for i=1:length(Cell_Number)
+    for iarm = 1:max(armpos)
+        otharms = setdiff(1:3,iarm);
+        for ioth = 1:2
+        
+            outind = thearms(:,2)==iarm & thearms(:,1)==otharms(ioth) & armpos==iarm;
+            Pos = Pos1(outind);        
+            vel1 = vel(outind);        
+            dirdat1 = dirdat(outind);
+
+            t=find(Spike(:,4)>VelThresh & Spike(:,1)==Cell_Number(i) & Spike(:,5)==1 & Spike(:,6)==iarm & Spike(:,7)==otharms(ioth) & Spike(:,8)==iarm);
+            if length(t)~=1
+                FR=60*histc(Spike(t,3),min(Pos):1:max(Pos))./histc(Pos(vel1>VelThresh & dirdat1==1),min(Pos):1:max(Pos));   
+            else
+                FR=60*histc(Spike(t,3),min(Pos):1:max(Pos))'./histc(Pos(vel1>VelThresh  & dirdat1==1),min(Pos):1:max(Pos));   
+            end
+    %         h = histc(Pos(vel1>VelThresh  & dirdat1==1),min(Pos):1:max(Pos));
+    %         FR(h<10) = NaN;    
+            FR(isnan(FR) | isinf(FR))=NaN;
+    %         if sum(h)>0
+    %             disp('stop')
+    %         end
+%             FR=fillmissing(FR(1:NumBin(iarm)),'linear');
+            thisind = min(Pos):max(Pos);
+            FR=fillmissing(FR,'linear');
+            if ~isempty(FR)
+                FR2 = [FR(1)*ones(20,1);FR;FR(end)*ones(20,1)];        
+                FRnew2 = filter2(Filter,FR2(end:-1:1)'); FRnew2 = FRnew2(end:-1:1);
+                FRnew3 = filter2(Filter,FR2');        
+                FRnew4 = mean([FRnew2' FRnew3'],2);
+                OutFR(i,thisind,ioth)=FRnew4(21:end-20);
+    %             OutFR(i,thisind,ioth)=filter2(Filter,FR');  
+            end
+
+            inind = thearms(:,1)==iarm & thearms(:,2)==otharms(ioth) & armpos==iarm;
+            Pos = Pos1(inind);        
+            vel1 = vel(inind);        
+            dirdat1 = dirdat(inind);
+
+            t=find(Spike(:,4)>VelThresh & Spike(:,1)==Cell_Number(i) & Spike(:,5)==0 & Spike(:,7)==iarm & Spike(:,8)==otharms(ioth));
+            if length(t)~=1
+                FR=60*histc(Spike(t,3),min(Pos):1:max(Pos))./histc(Pos(vel1>VelThresh & dirdat1==0),min(Pos):1:max(Pos));   
+            else
+                FR=60*histc(Spike(t,3),min(Pos):1:max(Pos))'./histc(Pos(vel1>VelThresh & dirdat1==0),min(Pos):1:max(Pos));   
+            end        
+    %         h = histc(Pos(vel1>VelThresh & dirdat1==0),min(Pos):1:max(Pos));
+    %         FR(h<10) = NaN;
+            FR(isnan(FR) | isinf(FR))=NaN;
+            thisind = min(Pos):max(Pos);
+            FR=fillmissing(FR,'linear');
+            if ~isempty(FR)
+                FR2 = [FR(1)*ones(20,1);FR;FR(end)*ones(20,1)];        
+                FRnew2 = filter2(Filter,FR2(end:-1:1)'); FRnew2 = FRnew2(end:-1:1);
+                FRnew3 = filter2(Filter,FR2');        
+                FRnew4 = mean([FRnew2' FRnew3'],2);
+                InFR(i,thisind,ioth)= FRnew4(21:end-20);
+    %             InFR(i,thisind,ioth)=filter2(Filter,FR');  
+            end
+        end
+    end
+end
+
+armposindex = index;
+binpos = Pos1;
+
+InFR(InFR<0) = 0;
+OutFR(OutFR<0) = 0;
+% 
+% for ii = 1:7
+%     if ii == 1; FR = InFR(:,:,1);
+%     elseif ii == 2; FR = InFR(:,:,2);
+%     elseif ii == 3; FR = OutFR(:,:,1);
+%     elseif ii == 4; FR = OutFR(:,:,2);
+%     elseif ii == 5; FR = nanmean(InFR,3);
+%     elseif ii == 6; FR = nanmean(OutFR,3);
+%     elseif ii == 7; FR = nanmean(OutFR+InFR,3);
+%     end
+%     FR = FR(setdiff(hp_cells,hpinterneurons),:);
+%     [~,I] = max(FR,[],2);
+%     [~,I2] = sort(I);
+%     FR = FR./max(FR,[],2);
+%     figure; imagesc(FR(I2,:)); colormap bone
+% end

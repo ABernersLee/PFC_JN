@@ -1,0 +1,52 @@
+function [lapmodu,cellmodu] = make_replaylapmodu(thisdir,label,ilaptype)
+
+load(thisdir,[label '_PFCreplayspikes_binned'],[label '_replay_stnd'],'laps_coverspace','laps_singlepass','laps_twoarms','pos','other_cells')
+load(thisdir,[label  '_replay_maxjump'],[label '_replay_corr'])
+
+if ~exist([label '_PFCreplayspikes_binned'],'var')
+    make_PFC_replayeventtriggeredmat(thisdir,label)
+    load(thisdir,[label '_PFCreplayspikes_binned'])
+end
+eval(['PFCreplay = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplay = ' label '_PFCreplayspikes_binned;'])
+eval(['re = ' label '_replay_corr;'])
+clear([label '_PFCreplayspikes_list'])
+
+tm = pos(:,1);
+clear pos
+pfc = other_cells;
+clear other_cells
+
+if ilaptype == 1
+    laps = laps_coverspace;
+elseif ilaptype == 2
+    laps = laps_singlepass;
+elseif ilaptype == 3
+    laps = laps_twoarms;
+end
+
+binsize = .002;
+window = [-.5 .5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+
+modind = ind>0 & ind<=.2;
+baseind = ind>=-.5 & ind<-.1;
+
+lapmodu = NaN(length(pfc),max(laps));
+for icell = 1:length(pfc)
+    for ilap = 1:max(laps)
+        lapind = RP_replay_stnd(:,1)>=min(tm(laps==ilap)) & RP_replay_stnd(:,1)<max(tm(laps==ilap));
+        m = nanmean(sum(PFCreplay(icell,modind,lapind),2));
+        b = nanmean(sum(PFCreplay(icell,baseind,lapind),2)./2);        
+        lapmodu(icell,ilap) = (m-b)./(m+b);
+    end    
+end
+    
+
+[r,p] = corr([1:size(lapmodu,2)]',lapmodu','rows','complete');
+cellmodu = [r' p'];
+    
+    
+    
+
+

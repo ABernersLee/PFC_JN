@@ -1,0 +1,45 @@
+function make_other_cells_touse(dirs)
+ratdays = [1;1;1;2;2;2;2;3;3;3;4];
+cd(dirs.homedir)
+d2 = dir('*.mat');
+
+for irat = 1:4
+    udays = find(ratdays==irat);
+    TTdays = [];
+    numcells = NaN(length(udays),1);
+    for id = 1:length(udays)
+        thisdir = d2(udays(id)).name;            
+        load(thisdir,'other_cells','rawspikedata')
+        pfcTT = NaN(length(other_cells),1);
+        for pfc = 1:length(other_cells)
+            pfcTT(pfc,1) = unique(rawspikedata(rawspikedata(:,2)==other_cells(pfc),3));
+        end
+        TTdays = [TTdays; [other_cells pfcTT udays(id)*ones(size(pfcTT,1),1)]];   
+        numcells(id) = length(other_cells);
+    end
+    TTall = unique(TTdays(:,2));
+    [~,m] = max(numcells);
+
+    tousett = false(size(TTdays,1),3);
+    tousett(:,1) = true;
+    tousett(ismember(TTdays(:,3),udays(m)),3) = true;
+    for itet = 1:length(TTall)    
+        numcellsday = NaN(length(udays),1);
+        for iday = 1:length(udays)
+            numcellsday(iday,1) = sum(TTdays(:,3)==udays(iday) & TTdays(:,2)==TTall(itet));
+        end
+        [~,m] = max(numcellsday);
+        tousett(TTdays(:,3)==udays(m) & TTdays(:,2)==TTall(itet),2) = true;
+    end
+    
+    for id = 1:length(udays)
+        thisdir = d2(udays(id)).name;            
+        load(thisdir,'other_cells')
+        other_cells_touse = tousett(TTdays(:,3)==udays(id),:);
+        if size(other_cells_touse,1)~=size(other_cells,1)
+            error('Cell index wrong')
+        end
+        save(thisdir,'other_cells_touse','-append')
+    end
+    
+end

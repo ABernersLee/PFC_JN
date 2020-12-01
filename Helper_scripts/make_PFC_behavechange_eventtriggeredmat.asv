@@ -1,0 +1,276 @@
+function make_PFC_behavechange_eventtriggeredmat(thisdir,toplot)
+
+load(thisdir,'other_cells','spikedata')
+load(thisdir, 'armpos', 'behave_change_log', 'headingarm','pos','dirname')
+
+Event = pos(behave_change_log(:,6)==1,1); % 6 is arrive middle, 1 is leave middle
+p = other_cells; clear other_cells
+
+PFCspk = spikedata(ismember(spikedata(:,2),p),1:2); 
+binsize = .04;
+window = [-3 3];
+% window = [-5 5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+
+E = [Event+window(1) Event+window(2)];
+B = cumsum([0 diff(E')]);
+[~,I] = histc(PFCspk(:,1),sortrows(E(:)));
+
+
+PFCbehavechange_list = [PFCspk ones(size(PFCspk,1),1)];
+for i = 1:2:max(I)
+    PFCbehavechange_list(I==i,1) = PFCspk(I==i,1)-(E(ceil(i/2),1)-window(1));
+    PFCbehavechange_list(I==i,3) = ones(sum(I==i),1)*ceil(i/2);      
+    PFCspk(I==i,1) = PFCspk(I==i,1)-E(ceil(i/2),1)+B(ceil(i/2));    
+end
+PFCspk(~mod(I,2),:)=[];
+PFCbehavechange_list(~mod(I,2),:)=[];
+
+
+rs = NaN(length(p),length(ind)*size(E,1));
+for icell = 1:length(p)    
+    rs(icell,:) = histc(PFCspk(PFCspk(:,2)==p(icell),1),B(1)+binsize/2:binsize:round(B(end))-binsize/2);  
+end
+PFCbehavechange_binned = reshape(rs,[size(rs,1) length(ind) size(E,1)]);
+
+PFCbehavechange_arm_on = armpos(behave_change_log(:,6)==1);
+PFCbehavechange_arm_goingto = headingarm(behave_change_log(:,6)==1);
+
+
+
+%now breaking down by conditions and testing significance
+% modwind = ind>=-1 & ind<=1;
+% basewind = (ind>=-3 & ind<-1);
+modwind = ind>=-.5 & ind<=.5;
+basewind = (ind>=-3 & ind<-.5) | (ind>=.5 & ind<=3);
+
+nS = 500;
+
+
+
+m = squeeze((sum(PFCbehavechange_binned(:,modwind,:),2)/(sum(modwind)*binsize)));
+b = squeeze((sum(PFCbehavechange_binned(:,basewind,:),2)/(sum(basewind)*binsize)));
+modu = (mean(m,2)-mean(b,2))./(mean(m,2)+mean(b,2));
+realSSD = sum((m-b).^2,2);
+fSSD = NaN(nS,size(realSSD,1));
+for iN = 1:nS
+    
+    k = randi(size(PFCbehavechange_binned,2),size(PFCbehavechange_binned,3));
+    NN = NaN(size(PFCbehavechange_binned));
+    for ik = 1:size(k,1)
+        NN(:,:,ik) = circshift(PFCbehavechange_binned(:,:,ik),k(ik,1),2);
+    end
+    
+    m = squeeze((sum(NN(:,modwind,:),2)/(sum(modwind)*binsize)));
+    b = squeeze((sum(NN(:,basewind,:),2)/(sum(basewind)*binsize)));
+    fSSD(iN,:) = sum((m-b).^2,2);
+%     fmod(iN,:) = (mean(m,2)-mean(b,2))./(mean(m,2)+mean(b,2));
+end
+p_SSD = (sum(fSSD'>realSSD,2)+1)./(nS+1);
+
+
+armmod = NaN(size(p_SSD,1),3);
+headarmmod = NaN(size(p_SSD,1),3);
+for iarm = 1:3
+   %do for the different arms, modulation and difference between them    
+    m = squeeze(mean(PFCbehavechange_binned(:,modwind,PFCbehavechange_arm_on==iarm),2));
+    b = squeeze(mean(PFCbehavechange_binned(:,basewind,PFCbehavechange_arm_on==iarm),2));
+    armmod(:,iarm) = nanmean((m-b)./(m+b),2);
+    
+    m = squeeze((sum(PFCbehavechange_binned(:,modwind,PFCbehavechange_arm_goingto==iarm),3)/(sum(modwind)*binsize)));
+    b = squeeze((sum(PFCbehavechange_binned(:,basewind,PFCbehavechange_arm_goingto==iarm),3)/(sum(basewind)*binsize)));
+    headarmmod(:,iarm) = (mean(m,2)-mean(b,2))./(mean(m,2)+mean(b,2));   
+end
+armSSD = nansum([((armmod(:,1)-armmod(:,2)).^2) ((armmod(:,1)-armmod(:,3)).^2) ((armmod(:,3)-armmod(:,2)).^2)],2);
+headarmSSD = nansum([((headarmmod(:,1)-headarmmod(:,2)).^2) ((headarmmod(:,1)-headarmmod(:,3)).^2) ((headarmmod(:,3)-headarmmod(:,2)).^2)],2);
+
+armSSDf = NaN(size(armSSD,1),nS);
+headarmSSDf = armSSDf;
+for iN = 1:nS
+    ind2 = randperm(length(PFCbehavechange_arm_on));
+    armmodS = NaN(size(p_SSD,1),3);
+    headarmmodS = NaN(size(p_SSD,1),3);
+    for iarm = 1:3        
+       %do for the different arms, modulation and difference between them    
+        m = squeeze(mean(PFCbehavechange_binned(:,modwind,PFCbehavechange_arm_on(ind2)==iarm),2));
+        b = squeeze(mean(PFCbehavechange_binned(:,basewind,PFCbehavechange_arm_on(ind2)==iarm),2));
+        armmodS(:,iarm) = nanmean((m-b)./(m+b),2);
+
+        m = squeeze((sum(PFCbehavechange_binned(:,modwind,PFCbehavechange_arm_goingto(ind2)==iarm),3)/(sum(modwind)*binsize)));
+        b = squeeze((sum(PFCbehavechange_binned(:,basewind,PFCbehavechange_arm_goingto(ind2)==iarm),3)/(sum(basewind)*binsize)));
+        headarmmodS(:,iarm) = (mean(m,2)-mean(b,2))./(mean(m,2)+mean(b,2));   
+    end
+    armSSDf(:,iN) = nansum([((armmodS(:,1)-armmodS(:,2)).^2) ((armmodS(:,1)-armmodS(:,3)).^2) ((armmodS(:,3)-armmodS(:,2)).^2)],2);
+    headarmSSDf(:,iN) = nansum([((headarmmodS(:,1)-headarmmodS(:,2)).^2) ((headarmmodS(:,1)-headarmmodS(:,3)).^2) ((headarmmodS(:,3)-headarmmodS(:,2)).^2)],2);    
+end
+p_armSSD = (sum(armSSDf>armSSD,2)+1)./(nS+1);
+p_headarmSSD = (sum(headarmSSDf>headarmSSD,2)+1)./(nS+1);
+
+% do across laps
+load(thisdir, 'laps_coverspace','laps_twoarms','laps_singlepass')
+laplab = {'laps_coverspace','laps_twoarms','laps_singlepass'};
+mxlap = max([laps_coverspace laps_twoarms laps_singlepass]);
+alllaps = max(mxlap);
+lapmod = NaN(size(p_armSSD,1),alllaps,3);
+lapSSD = lapmod;
+lapcorr = NaN(size(p_armSSD,1),3,4);
+for type = 1:3
+    eval(['laps = ' laplab{type} ';'])
+    for ilap = 1:max(laps)
+        if sum(laps(behave_change_log(:,6)==1)==ilap)>0
+            m = squeeze((sum(PFCbehavechange_binned(:,modwind,laps(behave_change_log(:,6)==1)==ilap),2)/(sum(modwind)*binsize)));
+            b = squeeze((sum(PFCbehavechange_binned(:,basewind,laps(behave_change_log(:,6)==1)==ilap),2)/(sum(basewind)*binsize)));
+            lapmod(:,ilap,type) = (mean(m,2)-mean(b,2))./(mean(m,2)+mean(b,2));            
+            lapSSD(:,ilap,type) = sum((m-b).^2,2);
+            lapSSD(sum([b m],2)==0,ilap,type) = NaN;
+        end
+    end
+    
+    for icell = 1:size(lapSSD,1)
+        [lapcorr(icell,type,1), lapcorr(icell,type,2)] = corr([1:alllaps]',squeeze(lapmod(icell,:,type))','rows','complete');
+        [lapcorr(icell,type,3), lapcorr(icell,type,4)] = corr([1:alllaps]',squeeze(lapSSD(icell,:,type))','rows','complete');
+    end
+end
+
+
+
+%if to plot
+%plot for each cell, one big figure
+if toplot
+    newcol = [0 0 0; 1 0 0; .8 .2 1];
+    smoothsize = 5; withmodpatch = 1; 
+    plotwindow = window;
+    ltitles = {'All Traversals';'By Current Arm';'By Future Arm';'Over Laps'};
+   for icell = 1:length(p)
+      figure; hold on      
+      for itype = 1:3
+         if itype == 3; spn = 5; else, spn = itype; end
+         if itype == 1;armnum = 1; else, armnum =3 ; end
+%          subplot(4,2,spn); hold on
+%          subplot(4,2,spn+2); hold on
+         toadd = 0;
+         for iarm = 1:armnum
+             if itype == 1
+                 indrest = true(size(PFCbehavechange_binned,3),1); pv = p_SSD;
+             elseif itype == 2
+                 indrest = PFCbehavechange_arm_on; pv = p_armSSD;
+             elseif itype == 3
+                 indrest = PFCbehavechange_arm_goingto; pv = p_headarmSSD;
+             end
+             
+             db = PFCbehavechange_binned(icell,:,indrest==iarm);
+             dl = PFCbehavechange_list;           
+             dl(ismember(PFCbehavechange_list(:,3),find(indrest~=iarm)),:) = [];
+        
+            dat1 = squeeze(mean(db(1,:,:),3));
+            sem1 = squeeze(std(db(1,:,:),[],3))./sqrt(size(db,3));
+            sem2 = smoothts([sem1 sem1 sem1 sem1],'b',smoothsize); 
+            sem = sem2(length(dat1)*2:length(dat1)*3-1);            
+            sm = smoothts([dat1 dat1 dat1 dat1],'b',smoothsize);
+            dat = sm(length(dat1)*2:length(dat1)*3-1);            
+            rev = dat+sem;
+            
+            [~,~,jj] = unique(dl(dl(:,2)==p(icell),3));
+            
+            if ~isempty(jj)
+                subplot(4,2,spn), hold on
+                plot(dl(dl(:,2)==p(icell),1),jj+toadd,'.','Color',newcol(iarm,:),'MarkerSize',5)
+                toadd = toadd+max(jj);
+
+                if iarm == armnum
+                    xlim(plotwindow)
+                    ylim([0 toadd])    
+                    yl = get(gca,'ylim');
+                    plot([0 0], yl,':','Color',[.5 .5 .5],'LineWidth',3)
+    %                 set(gca,'xtick',[-.5 -.25 0 .25 .5],'xticklabel',[-500 -250 0 250 500])
+                    xlabel(['Time From Enter Choice Point - ' ltitles{itype}])
+                    ylabel('Traversal')
+                    set(gca,'FontSize',16,'FontName','Helvetica')                    
+                    if itype == 1
+                        title([dirname ' Cell ' num2str(p(icell))])
+                    end
+                end
+
+                subplot(4,2,spn+2), hold on
+                pp = patch([ind ind(end:-1:1)],[dat-sem rev(end:-1:1)]./binsize,'black');
+                pp.FaceColor= newcol(iarm,:);
+                pp.FaceAlpha=.1;
+                pp.EdgeAlpha=.1;
+                plot(ind,dat./binsize,'Color',newcol(iarm,:),'LineWidth',2)
+
+                if iarm == armnum
+                    xlim(plotwindow)
+                    yl = get(gca,'ylim');
+                    yl(1) = max([yl(1) 0]);
+                    plot([0 0], yl,':','Color',[.5 .5 .5],'LineWidth',3)
+                    ttt = text(plotwindow(2)*.3,yl(2)*.8,['p = ' num2str(round(pv(icell),2,'significant'))]);
+                    if pv(icell)<.05
+                        ttt.Color = 'r';
+                    end
+                    yl = get(gca,'ylim');
+                    if withmodpatch && itype == 1      
+                        modind = ind(modwind); baseind = ind(basewind);
+                        patch([modind modind(end:-1:1)],[ones(size(modind))*yl(1) ones(size(modind))*(yl(1)+(yl(2)-yl(1))*.05)],'red','FaceAlpha',.4,'EdgeAlpha',0)
+                        patch([baseind baseind(end:-1:1)],[ones(size(baseind))*yl(1) ones(size(baseind))*(yl(1)+(yl(2)-yl(1))*.05)],'black','FaceAlpha',.2,'EdgeAlpha',0)
+                    end
+    %                 set(gca,'xtick',[-.5 -.25 0 .25 .5],'xticklabel',[-500 -250 0 250 500])
+                    ylim(yl)                        
+                    xlabel(['Time From Enter Choice Point - ' ltitles{itype}])
+                    ylabel('Firing Rate (Hz)')    
+                    set(gca,'FontSize',16,'FontName','Helvetica')
+                end
+            end
+             
+         end
+      end
+      %then over laps
+      subplot(4,2,6), hold on
+      for itype = 1:3
+         dat1 = fillmissing(lapmod(icell,1:mxlap(itype),itype),'linear');
+         sm = smoothts([dat1 dat1 dat1 dat1],'b',4);
+         dat = sm(length(dat1)*2:length(dat1)*3-1);
+         plot(1:length(dat),dat,'-','Color',newcol(itype,:),'LineWidth',2)
+      end
+      ll = legend(['All Arms, r = ' num2str(round(lapcorr(icell,1,1),2,'significant')) ' p = ' num2str(round(lapcorr(icell,1,2),2,'significant'))] ...
+          ,['Two Arms, r = ' num2str(round(lapcorr(icell,2,1),2,'significant')) ' p = ' num2str(round(lapcorr(icell,2,2),2,'significant'))] ...
+          ,['Single Pass, r = ' num2str(round(lapcorr(icell,3,1),2,'significant')) ' p = ' num2str(round(lapcorr(icell,3,2),2,'significant'))]);
+%       title('Modulation Over Laps')      
+      xlabel('Laps'); ylabel('Modulation Index')
+      ll.FontSize = 12; ll.Location = 'eastoutside';
+       set(gca,'FontSize',16,'FontName','Helvetica')
+      
+      subplot(4,2,8), hold on
+      for itype = 1:3
+         dat1 = fillmissing(lapSSD(icell,1:mxlap(itype),itype),'linear');
+         sm = smoothts([dat1 dat1 dat1 dat1],'b',4);
+         dat = sm(length(dat1)*2:length(dat1)*3-1);
+         plot(1:length(dat),dat,'-','Color',newcol(itype,:),'LineWidth',2)
+      end
+      ll = legend(['All Arms, r = ' num2str(round(lapcorr(icell,1,3),2,'significant')) ' p = ' num2str(round(lapcorr(icell,1,4),2,'significant'))] ...
+          ,['Two Arms, r = ' num2str(round(lapcorr(icell,2,3),2,'significant')) ' p = ' num2str(round(lapcorr(icell,2,4),2,'significant'))] ...
+          ,['Single Pass, r = ' num2str(round(lapcorr(icell,3,3),2,'significant')) ' p = ' num2str(round(lapcorr(icell,3,4),2,'significant'))]);
+%       title('SSD Over Laps'); 
+      xlabel('Laps'); ylabel('SSD')
+      ll.FontSize = 12; ll.Location = 'eastoutside';
+       set(gca,'FontSize',16,'FontName','Helvetica')
+       
+       set(gcf,'Position',[1          41        1920         963])       
+       helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\ChoicePoint\' dirname '_Cell' num2str(p(icell))])
+   end
+end
+    
+
+%SAVE:  modu, armmod, headarmmod, p_SSD, p_armSSD, p_headarmSSD, lapmod, lapSSD, lapcorr
+PFCbehavechangeData.modu = modu;
+PFCbehavechangeData.armmodu = armmod;
+PFCbehavechangeData.headarmmodu = headarmmod;
+PFCbehavechangeData.pSSD = p_SSD;
+PFCbehavechangeData.parmSSD = p_armSSD;
+PFCbehavechangeData.pheadarmSSD = p_headarmSSD;
+PFCbehavechangeData.lapmod = lapmod;
+PFCbehavechangeData.lapcorr = lapcorr;
+PFCbehavechangeData.lapSSD = lapSSD;
+save(thisdir,'PFCbehavechange_binned','PFCbehavechange_list','PFCbehavechange_arm_goingto','PFCbehavechange_arm_on','PFCbehavechangeData','-append')
+
+
+

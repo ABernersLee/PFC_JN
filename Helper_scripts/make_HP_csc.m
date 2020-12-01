@@ -1,0 +1,137 @@
+function make_HP_csc(dirs,thisdir)
+
+disp('Start make_HP_csc')
+load([dirs.homedir thisdir],'rawspikedata','params')
+
+numcells = NaN(length(params.HPtt),1);
+for itt = 1:length(params.HPtt)
+    numcells(itt) = length(unique(rawspikedata(rawspikedata(:,3)==params.HPtt(itt),2)));
+end
+[~,b] = sort(numcells,'descend');
+
+%using TT with most cells
+touse = params.HPtt(b(1));
+load([dirs.cscdatadir '\' params.Rat_Name '_' num2str(params.Date) '_csc_tt' num2str(touse)],'cscsamples','csctimes','Fs')
+LFPdata = [csctimes cscsamples];       
+
+%for adding in Delta
+if 0
+% The following values are used to build the bandpass filter for alpha detection
+Theta_Stop_Low=1;                
+Theta_Pass_Low=2;               
+Theta_Pass_High=4;             
+Theta_Stop_High=5;              
+Stop_Band_Attenuation_One=60;    % This was the default, I think.  
+Pass_Band=1;                     % This was the default, I think.
+Stop_Band_Attenuation_Two=80;    % This was the default, I think.
+Filter_Design_For_Theta=fdesign.bandpass(Theta_Stop_Low, Theta_Pass_Low, Theta_Pass_High, Theta_Stop_High, Stop_Band_Attenuation_One, Pass_Band, Stop_Band_Attenuation_Two, Fs);
+Theta_Filter=design(Filter_Design_For_Theta,'butter');  %'equiripple' and 'cheby1' and 'cheby2' also work, but 'butter' was generally faster and gave similar results
+
+% This begins the actual filtering function
+HP_Delta=zeros(size(LFPdata,1),4);
+HP_Delta(:,1)=LFPdata(:,1);
+HP_Delta(:,2)=filter(Theta_Filter,LFPdata(:,2));
+HP_Delta(:,2)=HP_Delta(end:-1:1,2);    % filtfilt doesn't work for these band-pass filters, so I have to manually filter, flip the resultant dataset, and filter again in the opposite direction to get a zero-phase distortion
+HP_Delta(:,2)=filter(Theta_Filter,HP_Delta(:,2));
+HP_Delta(:,2)=HP_Delta(end:-1:1,2);
+for M=1:2000000:size(HP_Delta,1)  % In case the program crashes if much more than about 2000000 samples are transformed at once
+    HP_Delta(M:min([size(HP_Delta,1),M+2000000]),3)=hilbert(HP_Delta(M:min([size(HP_Delta,1),M+2000000]),2));
+end
+HP_Delta(:,4)=(angle(HP_Delta(:,3))*180/pi)+180;
+HP_Delta(:,3)=abs(HP_Delta(:,3));
+% The following gaussian filter has a sigma of 300 ms
+Theta_Gaussian_Filter=fspecial('gaussian',[round(3*(300/((1/Fs)*1000))),1],round(300/((1/Fs)*1000)));
+HP_Delta(:,3)=filtfilt(Theta_Gaussian_Filter,1,HP_Delta(:,3));
+clear Theta_Gaussian_Filter;
+% The following z-scores the filtered trace
+HP_Delta(:,3)=zscore(HP_Delta(:,3));
+
+disp('Done with Delta')
+save([dirs.homedir thisdir],'HP_Delta','-append')
+end
+
+%for adding in Theta
+%Theta - 
+% The following values are used to build the bandpass filter for theta detection
+Theta_Stop_Low=5;                
+Theta_Pass_Low=6;                % Some papers use as low as 4 Hz as the low cutoff
+Theta_Pass_High=12;              % Some papers use as high as 12 Hz as the high cutoff
+Theta_Stop_High=14;              
+Stop_Band_Attenuation_One=60;    % This was the default, I think.  
+Pass_Band=1;                     % This was the default, I think.
+Stop_Band_Attenuation_Two=80;    % This was the default, I think.
+Filter_Design_For_Theta=fdesign.bandpass(Theta_Stop_Low, Theta_Pass_Low, Theta_Pass_High, Theta_Stop_High, Stop_Band_Attenuation_One, Pass_Band, Stop_Band_Attenuation_Two, Fs);
+Theta_Filter=design(Filter_Design_For_Theta,'butter');  %'equiripple' and 'cheby1' and 'cheby2' also work, but 'butter' was generally faster and gave similar results
+
+% This begins the actual theta filtering function
+HP_Theta=zeros(size(LFPdata,1),4);
+HP_Theta(:,1)=LFPdata(:,1);
+HP_Theta(:,2)=filter(Theta_Filter,LFPdata(:,2));
+HP_Theta(:,2)=HP_Theta(end:-1:1,2);    % filtfilt doesn't work for these band-pass filters, so I have to manually filter, flip the resultant dataset, and filter again in the opposite direction to get a zero-phase distortion
+HP_Theta(:,2)=filter(Theta_Filter,HP_Theta(:,2));
+HP_Theta(:,2)=HP_Theta(end:-1:1,2);
+for M=1:2000000:size(HP_Theta,1)  % In case the program crashes if much more than about 2000000 samples are transformed at once
+    HP_Theta(M:min([size(HP_Theta,1),M+2000000]),3)=hilbert(HP_Theta(M:min([size(HP_Theta,1),M+2000000]),2));
+end
+HP_Theta(:,4)=(angle(HP_Theta(:,3))*180/pi)+180;
+HP_Theta(:,3)=abs(HP_Theta(:,3));
+% The following gaussian filter has a sigma of 300 ms
+Theta_Gaussian_Filter=fspecial('gaussian',[round(3*(300/((1/Fs)*1000))),1],round(300/((1/Fs)*1000)));
+HP_Theta(:,3)=filtfilt(Theta_Gaussian_Filter,1,HP_Theta(:,3));
+clear Theta_Gaussian_Filter;
+% The following z-scores the filtered trace
+HP_Theta(:,3)=zscore(HP_Theta(:,3));
+
+
+disp('Done with Theta in make_HP_csc')
+
+% Ripple - using average ripple power (zscored) across 3 tt with the most cells
+
+% The following values are used to build the bandpass filter for ripple detection
+Ripple_Stop_Low=130;
+Ripple_Pass_Low=150;             % Most papers use between 150 and 250 Hz to identify ripples
+Ripple_Pass_High=250;
+Ripple_Stop_High=275;
+Stop_Band_Attenuation_One=60;    % This was the default, I think.  
+Pass_Band=1;                     % This was the default, I think.
+Stop_Band_Attenuation_Two=80;    % This was the default, I think.
+Filter_Design_For_Ripple=fdesign.bandpass(Ripple_Stop_Low, Ripple_Pass_Low, Ripple_Pass_High, Ripple_Stop_High, Stop_Band_Attenuation_One, Pass_Band, Stop_Band_Attenuation_Two, Fs);
+Ripple_Filter=design(Filter_Design_For_Ripple,'butter');  %'equiripple' and 'cheby1' and 'cheby2' also work, but 'butter' was generally faster and gave similar results
+
+
+touse = params.HPtt(b(1:3));
+
+for icsc = 1:length(touse)
+    load([dirs.cscdatadir '\' params.Rat_Name '_' num2str(params.Date) '_csc_tt' num2str(touse(icsc))],'cscsamples','csctimes','Fs')
+
+    LFPdata = [csctimes cscsamples];       
+    RipDat=zeros(size(LFPdata,1),3);
+    RipDat(:,1)=LFPdata(:,1);
+    RipDat(:,2)=filter(Ripple_Filter,LFPdata(:,2));
+    RipDat(:,2)=RipDat(end:-1:1,2);    % filtfilt doesn't work for these band-pass filters, so I have to manually filter, flip the resultant dataset, and filter again in the opposite direction to get a zero-phase distortion
+    RipDat(:,2)=filter(Ripple_Filter,RipDat(:,2));
+    RipDat(:,2)=RipDat(end:-1:1,2);
+    for M=1:2000000:size(RipDat,1)  % In case the program crashes if much more than about 2000000 samples are transformed at once
+        RipDat(M:min([size(RipDat,1),M+2000000]),3)=hilbert(RipDat(M:min([size(RipDat,1),M+2000000]),2));
+    end
+    RipDat(:,3)=abs(RipDat(:,3));
+    % The following gaussian filter has a sigma of 12 ms
+    Ripple_Gaussian_Filter=fspecial('gaussian',[round(7*(12.5/((1/Fs)*1000))),1],round(12.5/((1/Fs)*1000)));
+    RipDat(:,3)=filtfilt(Ripple_Gaussian_Filter,1,RipDat(:,3));
+    clear Ripple_Gaussian_Filter;
+    % The following z-scores the filtered trace
+    RipDat(:,3)=zscore(RipDat(:,3));
+    if icsc==1
+        HP_Ripple = RipDat(:,[1 3]);
+        HP_RippleRaw = [RipDat(:,1) LFPdata(:,2) RipDat(:,2:end)];
+    else
+        HP_Ripple(:,2) = HP_Ripple(:,2)+RipDat(:,3);
+    end
+    disp(['Done with Ripple ' num2str(icsc) ' in make_HP_csc'])
+end
+HP_Ripple(:,2) = HP_Ripple(:,2)./length(touse);
+
+
+save([dirs.homedir thisdir],'HP_RippleRaw','HP_Ripple','HP_Theta','-append')
+
+disp('Done with make_HP_csc')
