@@ -1,0 +1,95 @@
+function get_PFC_triggered_modusig(thisdir,label)
+%%
+load(thisdir,[label '_replay_singlebothjoint'],[label '_replay_replayarm'], ...
+    [label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],'other_cells','dirname')
+
+
+eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['replayarm = ' label '_replay_replayarm;'])
+clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+% pfc = other_cells(Cand_sig_modu_include(:,3)==1); clear other_cells;
+% PFCreplayspikes_binned(Cand_sig_modu_include(:,3)==0,:,:) = [];
+
+pfc = other_cells; clear other_cells
+%only single only replays
+PFCreplayspikes_binned(:,:,singlebothjoint~=1) = [];
+PFCreplayspikes_list(ismember(PFCreplayspikes_list(:,3),find(singlebothjoint~=1)),:) = [];
+replayarm1 = replayarm;
+replayarm = replayarm1(singlebothjoint==1);
+
+nS = 500;
+binsize = .002;
+window = [-.5 .5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+
+modind = ind>0 & ind<=.2;
+baseind = ind>=-.5 & ind<-.1;
+
+modu = NaN(3,length(pfc));
+p_SSD = NaN(length(pfc),1);
+combos = nchoosek(1:3,2);
+for icell = 1:length(pfc)
+    
+    mm = NaN(3,sum(modind));
+    mcount = NaN(3,1);
+    for iarm = 1:3        
+        m1 = squeeze(sum(PFCreplayspikes_binned(icell,modind,replayarm==iarm),3));
+        b1 = squeeze(sum(PFCreplayspikes_binned(icell,baseind,replayarm==iarm),3));
+        m = nanmean(sum(PFCreplayspikes_binned(icell,modind,replayarm==iarm),2));
+        b = nanmean(sum(PFCreplayspikes_binned(icell,baseind,replayarm==iarm),2)./2);
+        modu(iarm,icell) = (m-b)./(m+b);
+        mm(iarm,:) = (m1-(mean(b1)./(2*length(m1))))./sum(replayarm==iarm); %baseline subtract?
+        mcount(iarm) = sum(squeeze(sum(PFCreplayspikes_binned(icell,:,replayarm==iarm),3)));
+    end
+    
+    if sum(mcount<50)==0
+        SSD_obs = 0;
+        for ic = 1:size(combos,1)
+           SSD_obs = SSD_obs+sum(mean(mm(combos(ic,1),:)-mm(combos(ic,2),:)).^2);
+        end
+
+        SSD_sh = zeros(nS,1);
+        for i=1:nS
+            replayarmSh = replayarm(randperm(size(replayarm,1)));
+            ms = NaN(3,sum(modind));
+            for iarm = 1:3
+                m = sum(PFCreplayspikes_binned(icell,modind,replayarmSh==iarm),3);      
+                b = nanmean(sum(PFCreplayspikes_binned(icell,baseind,replayarmSh==iarm),3)./(2*length(m)));
+                ms(iarm,:) = (m-b)./sum(replayarmSh==iarm);
+            end
+            for ic = 1:size(combos,1)
+               SSD_sh(i,1) = SSD_sh(i,1)+sum(mean(ms(combos(ic,1),:)-ms(combos(ic,2),:)).^2);
+            end
+        end
+
+        p_SSD(icell,1) = (sum(SSD_sh>=SSD_obs)+1)/(nS+1);
+    else
+        p_SSD(icell,1) = NaN;
+    end
+      
+end
+[pfc p_SSD]
+
+modu2 = modu;
+ind = sum(isnan(modu))==0 & ~isnan(p_SSD)';
+modu2(:,~ind) = [];
+toplot = NaN(3,size(modu2,2));
+for iarm = 1:3
+    toplot(iarm,:) = [modu2(iarm,p_SSD(ind)>=.05)';modu2(iarm,p_SSD(ind)<.05)'];
+end
+%%
+hh = bigfigure; 
+scatter3(toplot(1,:),toplot(2,:),toplot(3,:),60*ones(size(toplot,2),1),[repmat([0 0 0],[sum(p_SSD(ind)>=.05) 1]);repmat([1 0 0],[sum(p_SSD(ind)<.05) 1])],'LineWidth',2);
+hold on
+set(gca,'xlim',[-.4 .4],'ylim',[-.4,.4],'zlim',[-.4 .4])
+plot3(get(gca,'XLim'),[0 0],[0 0],'color',[.5 .5 .5],'LineWidth',3);
+plot3([0 0],[0 0],get(gca,'ZLim'),'color',[.5 .5 .5],'LineWidth',3);
+plot3([0 0],get(gca,'YLim'),[0 0],'color',[.5 .5 .5],'LineWidth',3);
+scatter3(toplot(1,:),toplot(2,:),toplot(3,:),60*ones(size(toplot,2),1),[repmat([0 0 0],[sum(p_SSD(ind)>=.05) 1]);repmat([1 0 0],[sum(p_SSD(ind)<.05) 1])],'LineWidth',2);
+xlabel('Arm 1 Modulation')
+ylabel('Arm 2 Modulation')
+zlabel('Arm 3 Modulation')
+set(gca,'FontSize',18)
+

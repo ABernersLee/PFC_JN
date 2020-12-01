@@ -1,0 +1,138 @@
+% function get_PFC_fwdrev_dir_towards(dirs)
+% % % load('F:\XY_matdata\dirs.mat','dirs')
+figlab = 'F:\XY_matdata\Figures\ForPaperReviews\AllCells_AllArmEvents\FwdRev\';
+
+cd(dirs.homedir)
+d2 = dir('*.mat');
+
+ilab = 1;
+label = 'RP';
+modu_pSSD_id = [];
+
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;
+    load(thisdir,'pos','armpos',[label '_replay_singlebothjoint'], ...
+        [label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],'other_cells',[label  '_replay_shuffle_p']...
+        ,[label  '_replay_corr'],[label  '_replay_maxjump'],[label  '_replay_dirbias'],[label  '_replay_armcov'])
+
+
+    eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+    eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+    eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+    
+    eval(['corr = ' label '_replay_corr;'])
+    eval(['armcov1 = ' label  '_replay_armcov;'])
+    eval(['dirbias = ' label '_replay_dirbias;'])
+    eval(['shuffle_p = ' label  '_replay_shuffle_p;'])
+    eval(['mj = ' label  '_replay_maxjump;'])
+    eval(['wc = ' label  '_replay_corr;'])
+    clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+
+    pfc = other_cells; clear other_cells
+        
+%     [~,ii] = histc(stnd(touse,1),pos(:,1));
+    
+    %dirbias    
+    % 1 is pure inbound, -1 is pure outbound
+    
+    %corr
+    % outbound is positive, inbound is negative
+    
+%     replayarm~=armpos(ii);
+    
+    fwd_rev = NaN(size(dirbias));
+%     fwd_rev((dirbias>0 & corr<0) | (dirbias<0 & corr>0)) = 1; %fwd
+%     fwd_rev((dirbias>0 & corr>0) | (dirbias<0 & corr<0)) = 2; %rev
+    
+    fwd_rev(corr>0) = 1; %outbound
+    fwd_rev(corr<0) = 2; %inbound
+     
+%     fwd_rev(replayarm~=armpos(ii)) = 1; %of another arm
+%     fwd_rev(replayarm==armpos(ii)) = 2; %of the same arm
+    
+    if ilab==1    
+        fwd_rev(singlebothjoint==3) = NaN;
+    end
+    
+    nS = 2000;
+    binsize = .02;
+    window = [-2 2];
+    % ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+    ind = [window(1):binsize:window(2)];
+    modind1 = [0 .2];
+    baseind1 = [-.5 -.1];
+
+    modind = ind>=modind1(1) & ind<=(modind1(2));
+    baseind = ind>=baseind1(1) & ind<=baseind1(2);
+
+    modu = NaN(2,length(pfc));
+    
+    p_SSD = NaN(length(pfc),1);
+    
+    
+
+    IND = ~isnan(fwd_rev);
+    ra = fwd_rev(IND);
+    fwd_revShSave = fwd_rev;
+    for i=1:nS
+        fwd_revSh = fwd_rev;
+        fwd_revSh(IND) = ra(randperm(size(ra,1)));
+        while any(sum(fwd_revShSave(~isnan(fwd_rev),:)~=fwd_revSh(~isnan(fwd_rev)))==0) %sum(fwd_revSh(~isnan(fwd_revSh))~=fwd_rev(~isnan(fwd_rev)))==0
+            fwd_revSh = fwd_rev(randperm(size(fwd_rev,1)));
+            disp(['triggeredsame i = ' num2str(i)])
+        end
+        fwd_revShSave = cat(2,fwd_revShSave,fwd_revSh);
+    end
+    fwd_revShSave = fwd_revShSave(:,2:end);
+
+    for icell = 1:length(pfc)
+
+        mm = NaN(2,1);
+        mcount = NaN(2,1);
+        for idir = 1:2        
+            m = squeeze(squeeze(sum(PFCreplayspikes_binned(icell,modind,fwd_rev==idir),2)./range(modind1)));
+            b = squeeze(sum(PFCreplayspikes_binned(icell,baseind,fwd_rev==idir),2)./range(baseind1));
+            modu(idir,icell) = nanmean(m-b);
+            mm(idir) = nanmean(m-b);
+            mcount(idir) = sum(squeeze(sum(PFCreplayspikes_binned(icell,modind | baseind,fwd_rev==idir),3)));
+        end
+
+        if sum(mcount)>50  
+            
+           SSD_obs = (mm(1)-mm(2)).^2;
+            SSD_sh = zeros(nS,1);
+            for i = 1:nS
+                ms = NaN(2,1);
+                for idir = 1:2
+                    m = sum(PFCreplayspikes_binned(icell,modind,fwd_revShSave(:,i)==idir),2)./range(modind1);      
+                    b = nanmean(sum(PFCreplayspikes_binned(icell,baseind,fwd_revShSave(:,i)==idir),2)./range(baseind1));  
+                    ms(idir) = nanmean(m-b);
+                end
+                SSD_sh(i,1) = (ms(1)-ms(2)).^2;
+            end
+
+            p_SSD(icell,1) = (sum(SSD_sh>=SSD_obs)+1)/(nS+1);       
+        else
+            p_SSD(icell,1) = NaN; modu(:,icell) = NaN;
+        end
+
+    end
+
+    modu_pSSD_id = cat(1,modu_pSSD_id,[modu' p_SSD ones(size(p_SSD,1),1)*id]);
+    
+end
+
+p1 = signrank(modu_pSSD_id(:,1),modu_pSSD_id(:,2));
+p2 = signrank(modu_pSSD_id(modu_pSSD_id(:,3)<.05,1),modu_pSSD_id(modu_pSSD_id(:,3)<.05,2));
+% lab = {'fwd';'rev'};
+lab = {'outbound';'inbound'};
+figure; hold on;
+plot(modu_pSSD_id(:,1:2)','color',[.5 .5 .5])
+plot(modu_pSSD_id(modu_pSSD_id(:,3)<.05,1:2)','r')
+errorbar(nanmean(modu_pSSD_id(modu_pSSD_id(:,3)<.05,1:2)),nanstd(modu_pSSD_id(modu_pSSD_id(:,3)<.05,1:2))./sqrt(sum(~isnan(modu_pSSD_id(modu_pSSD_id(:,3)<.05,1)))),'k','LineWidth',2)
+p = 1-binocdf(sum(modu_pSSD_id(:,3)<.05)-1,sum(~isnan(modu_pSSD_id(:,3))),.05);
+title([num2str(sum(modu_pSSD_id(:,3)<.05)) ' of ' num2str(sum(~isnan(modu_pSSD_id(:,3)))) ...
+    ' sig (' num2str(round(100*(sum(modu_pSSD_id(:,3)<.05)./sum(~isnan(modu_pSSD_id(:,3)))),2)) '%), All cells p = ' num2str(round(p1,2,'significant')) ', sig cells p = ' num2str(round(p2,2,'significant'))])
+set(gca,'xtick',1:2,'xticklabel',lab)
+xlim([.8 2.2])
+helper_saveandclosefig([figlab '\' lab{1} '_' lab{2}])

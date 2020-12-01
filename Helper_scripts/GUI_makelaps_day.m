@@ -1,0 +1,200 @@
+function [laps_coverspace,laps_twoarms,laps_singlepass,headingarm,error_correct] = GUI_makelaps_day(behavior, behave_change_log, pos,armpos, linposcat,params,rundat)
+
+%first, make laps_coverspace, for linear laps this is just back and forth,
+    %for multi-arm laps this is going to all 3 arms
+%then, make laps_twoarms, for linear laps this is just back and forth,
+    %for multi-arm laps this is going to 2 arms
+    
+    %do seperately for each lap and then combine
+    
+behaviorS = behavior;
+behave_change_logS = behave_change_log;
+posS = pos;
+armposS = armpos;
+linposcatS = linposcat;
+
+laps_coverspace2 = NaN(size(behavior,1),1);
+laps_twoarms2 = NaN(size(behavior,1),1);
+laps_singlepass2 = NaN(size(behavior,1),1);
+headingarm2 = NaN(size(behavior,1),1);
+error_correct2 = NaN(size(behavior,1),1);
+
+[~,runs] = max(rundat,[],2);
+for irun = 1:max(runs)
+    
+    behavior = behaviorS(runs==irun,:);
+    behave_change_log = behave_change_logS(runs==irun,:);
+    pos = posS(runs==irun,:);
+    armpos = armposS(runs==irun,:);
+    linposcat = linposcatS(runs==irun,:);
+    
+    for laptype = 1:2
+        laplog = NaN(length(behave_change_log),1);
+        clear laps
+        if params.Track_Type == 1
+            lap_starts = find(behave_change_log(:,1));
+            otherside = find(behave_change_log(:,end));            
+            otherside(otherside<lap_starts(1,1),:) = [];
+            for o = 1:length(otherside)
+                lpend = lap_starts(find(lap_starts>otherside(o,1),1,'first'))-1;
+                if o == length(otherside) && isempty(lpend)
+                    continue
+                else
+                    lap_ends(o,1) = lpend;
+                end
+            end
+            lap_ends = unique(lap_ends);
+            laps = sort([lap_starts(1:end-1) lap_ends]);
+            clear lap_ends lap_starts otherside o lap_ends
+        else
+            [~,thisarm] = find(~isnan(behavior(find(~isnan(nansum(behavior,2)),1,'first'),:)));
+            i = 1;
+            laps(i,1) = find(~isnan(behavior(:,thisarm)),1,'first');
+            clear thisarm
+            stop = false;
+            while max(laps)<length(behavior) && ~stop
+                if laptype == 1
+                    ending = laps(i,:)+find(all((cumsum(behavior(laps(i,:):end,:)==4)>0),2),1,'first'); % has to have gone to each end at least once
+                elseif laptype == 2
+                        ending = laps(i,:)+find(sum((cumsum(behavior(laps(i,:):end,:)==4)>0),2)>=2,1,'first'); % has to have gone to at least two
+                end
+                i = i+1;
+                if isempty(find(behavior(ending:end,:)==1,1,'first')) || ending>=length(behavior) || sum(diff(armpos(ending:end))~=0)==0
+                    stop = true;
+                else                
+                testind = find(diff(armpos(ending:end))~=0,1,'first'); %then has to move arm
+                laps(i,1) = testind+ending;
+                end
+            end    
+            clear i stop ending testind
+            laps(:,2) = [laps(2:end)-1;length(behavior)];
+
+            %if he didn't finish the last lap, cut it
+            if sum(all((cumsum(behavior(laps(end,1):laps(end,2),:)==4)>0),2))==0
+                laps(end,:) = [];
+            end
+        end
+
+        for ilap = 1:size(laps,1)
+            laplog(laps(ilap,1):laps(ilap,2),1) = ilap;        
+        end    
+        clear ilap laps
+
+        if sum(~isnan(laplog))~=0
+           
+            vc = varycolor(max(laplog)); 
+
+            vc = vc(randperm(size(vc,1)),:); 
+            figure; hold on;
+            for ilap = 1:max(laplog)
+                 plot(pos(laplog==ilap,1),linposcat(laplog==ilap),'.','MarkerEdgeColor',vc(ilap,:))
+            end
+            axis tight
+
+
+            %checks if this is okay
+            prompt = 'Is this okay? y/n';
+            title(prompt)
+            yn = input([prompt ':  '],'s');
+            if strcmp(yn,'n')
+                return
+            else
+                close gcf
+                clear vc ilap prompt yn               
+            end
+        end
+        if laptype == 1
+            laps_coverspace = laplog; clear laplog
+        elseif laptype == 2
+            laps_twoarms = laplog; clear laplog
+        end
+    end
+
+    %finally, make laps_singlepass, for linear laps this is just back and forth,
+        %for multiple arms its in on one arm, out to the next arm
+    
+    
+    if params.Track_Type == 2
+        ilap = 1;
+        beh = nansum(behavior,2);
+        laps = NaN(size(behavior,1),1);
+        naht = true(size(laps));
+        st = find(beh==4,1,'first');
+        starm = armpos(st);
+        nd = find(beh==4 & armpos~=starm,1,'first');
+        laps(st:nd-1) = ilap; ilap = ilap+1;
+        naht(st:nd-1) = false;
+        while ~isempty(nd) && ~isempty(st)
+           st = find(beh==4 & naht,1,'first');
+           starm = armpos(st);
+           nd = find(beh==4 & armpos~=starm & naht,1,'first');
+           laps(st:nd-1) = ilap;
+           ilap = ilap+1;
+           naht(st:nd-1) = false;
+        end              
+        clear ilap beh naht ns st 
+
+        if sum(~isnan(laps))~=0
+        
+            vc = varycolor(max(laps)); 
+        
+            vc = vc(randperm(size(vc,1)),:); 
+            figure; hold on;
+            for ilap = 1:max(laps)
+                 plot(pos(laps==ilap,1),linposcat(laps==ilap),'.','MarkerEdgeColor',vc(ilap,:))
+            end
+            axis tight
+
+
+            %checks if this is okay
+            prompt = 'Is this okay? y/n';
+            title(prompt)
+            yn = input([prompt ':  '],'s');
+            if strcmp(yn,'n')
+                return
+            else
+                close gcf        
+                laps_singlepass = laps;
+                clear vc ilap prompt yn laps
+            end
+        end
+
+        headingarm = NaN(size(laps_singlepass,1),1);   
+        
+        
+        for ilap = 1:max(laps_singlepass)
+            headingarm(laps_singlepass==ilap) = armpos(find(laps_singlepass==ilap,1,'last'));
+        end
+        clear ilap 
+    else
+        headingarm = NaN(size(linposcat,1),1);
+        laps_singlepass = headingarm;
+    end
+
+    
+    close all
+    error_correct = NaN(size(laps_singlepass,1),1);
+    if ~isnan(nanmax(laps_coverspace2))
+        laps_coverspace2(runs==irun,:) = laps_coverspace+nanmax(laps_coverspace2);
+    else
+        laps_coverspace2(runs==irun,:) = laps_coverspace;
+    end
+    if ~isnan(nanmax(laps_twoarms2))
+        laps_twoarms2(runs==irun,:) = laps_twoarms+nanmax(laps_twoarms2);
+    else
+        laps_twoarms2(runs==irun,:) = laps_twoarms;
+    end
+    if ~isnan(nanmax(laps_singlepass2))
+        laps_singlepass2(runs==irun,:) = laps_singlepass+nanmax(laps_singlepass2);
+    else
+        laps_singlepass2(runs==irun,:) = laps_singlepass;
+    end
+    headingarm2(runs==irun,:) = headingarm;
+    error_correct2(runs==irun,:) = error_correct;
+end
+
+laps_coverspace = laps_coverspace2;
+laps_twoarms = laps_twoarms2;
+laps_singlepass = laps_singlepass2;
+headingarm = headingarm2;
+error_correct = error_correct2;

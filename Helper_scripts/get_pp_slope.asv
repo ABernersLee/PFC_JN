@@ -1,0 +1,15 @@
+function [r,sl,mu,p] = get_pp_slope(pos,deg,binsize)
+%deg should be in radians, come
+
+rs = NaN((2*pi)/binsize,2);
+for i = 1:(2*pi)/binsize
+   d = mod(deg+binsize*i,2*pi);
+   rs(i,1) = binsize*i;
+   [rs(i,2),rs(i,3)] = corr(pos,d);
+end
+
+[r,b] = min(rs(:,2));
+pp = polyfit(pos,rad2deg(mod(deg+binsize*b,2*pi)),1);
+sl = pp(1);
+mu = rad2deg(rs(b,1));
+p = rs(b,3);

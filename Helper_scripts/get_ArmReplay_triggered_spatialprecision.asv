@@ -1,0 +1,10 @@
+function [prec_hp,prec_pfc,sig_pfc,toplot,toplotind] = get_ArmReplay_triggered_spatialprecision(thisdir,igroup)
+
+load(thisdir,'other_cells','other_cells_touse',[label '_pSSDarm'],'spatialprecision')
+eval(['p_SSD = ' label '_pSSDarm;'])
+pfc = other_cells(other_cells_touse(:,igroup));
+sig_pfc = p_SSD(other_cells_touse(:,igroup))<.05;
+prec_hp = spatialprecision.prec(hp,:);
+prec_pfc = spatialprecision.prec(pfc,:);
+toplot = spatialprecision.toplot;
+toplotind = spatialprecision.toplotind;

@@ -1,0 +1,79 @@
+function get_PFC_fwdrevtriggered_modusig(thisdir,label)
+
+load(thisdir,[label '_replay_singlebothjoint'],[label '_replay_corr'],[label '_replay_dirbias'], ...
+    [label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],'other_cells','dirname')
+
+
+eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['corr = ' label '_replay_corr;'])
+eval(['dirbias = ' label '_replay_dirbias;'])
+clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+
+pfc = other_cells; clear other_cells
+
+%only single replays
+PFCreplayspikes_binned(:,:,singlebothjoint~=1) = [];
+PFCreplayspikes_list(ismember(PFCreplayspikes_list(:,3),find(singlebothjoint~=1)),:) = [];
+
+% pos corr is out, neg corr is in
+%-1 bias is out, 1 is in
+fwd = (corr>.3 & dirbias<-.3) | (corr<-.
+
+nS = 5000;
+binsize = .002;
+window = [-.5 .5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+
+modind = ind>0 & ind<=.2;
+baseind = ind>=-.5 & ind<-.1;
+
+modu = NaN(3,length(pfc));
+p_SSD = NaN(length(pfc),1);
+combos = nchoosek(1:3,2);
+for icell = 1:length(pfc)
+    
+    mm = NaN(3,sum(modind));
+    mcount = NaN(3,1);
+    for iarm = 1:3        
+        m1 = squeeze(sum(PFCreplayspikes_binned(icell,modind,replayarm==iarm),3));
+        b1 = squeeze(sum(PFCreplayspikes_binned(icell,baseind,replayarm==iarm),3));
+        m = nanmean(sum(PFCreplayspikes_binned(icell,modind,replayarm==iarm),2));
+        b = nanmean(sum(PFCreplayspikes_binned(icell,baseind,replayarm==iarm),2)./2);
+        modu(iarm,icell) = (m-b)./(m+b);
+        mm(iarm,:) = (m1-(mean(b1)./(2*length(m1))))./sum(replayarm==iarm); %baseline subtract?
+        mcount(iarm) = sum(squeeze(sum(PFCreplayspikes_binned(icell,:,replayarm==iarm),3)));
+    end
+    
+    if sum(mcount<50)==0
+        SSD_obs = 0;
+        for ic = 1:size(combos,1)
+           SSD_obs = SSD_obs+sum(mean(mm(combos(ic,1),:)-mm(combos(ic,2),:)).^2);
+        end
+
+        SSD_sh = zeros(nS,1);
+        for i=1:nS
+            replayarmSh = replayarm(randperm(size(replayarm,1)));
+            ms = NaN(3,sum(modind));
+            for iarm = 1:3
+                m = sum(PFCreplayspikes_binned(icell,modind,replayarmSh==iarm),3);      
+                b = nanmean(sum(PFCreplayspikes_binned(icell,baseind,replayarmSh==iarm),3)./(2*length(m)));
+                ms(iarm,:) = (m-b)./sum(replayarmSh==iarm);
+            end
+            for ic = 1:size(combos,1)
+               SSD_sh(i,1) = SSD_sh(i,1)+sum(mean(ms(combos(ic,1),:)-ms(combos(ic,2),:)).^2);
+            end
+        end
+
+        p_SSD(icell,1) = (sum(SSD_sh>=SSD_obs)+1)/(nS+1);
+    else
+        p_SSD(icell,1) = NaN;
+    end
+      
+end
+
+eval([label '_pSSDarm = p_SSD'])
+eval([label '_moduarm = modu'])
+save(thisdir,[label '_pSSDarm'],[label '_moduarm'],'-append')
+

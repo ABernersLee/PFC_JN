@@ -1,0 +1,238 @@
+function [allcells1,allcells] = get_PFC_hoverjump_spikeprob_mrv(thisdir,label,spikecutoff)
+
+load(thisdir,'other_cells','slowgamma_localspikephase','hp_cells','hpinterneurons')
+hpcells = hp_cells(~ismember(hp_cells,hpinterneurons));
+pfc = other_cells; clear other_cells
+% spiketimes = spikedata(ismember(spikedata(:,2),pfc),1:2); clear spikedata
+spikephase = slowgamma_localspikephase(ismember(slowgamma_localspikephase(:,2),pfc),[1:2 5]); 
+spikephaseHP = slowgamma_localspikephase(ismember(slowgamma_localspikephase(:,2),hpcells),[1 5]); 
+clear slowgamma_localspikephase
+
+% load(thisdir,[label  '_replay_maxjump'],[label  '_replay_corr'],[label  '_seqisjump_bin'],[label  '_replay_singlebothjoint'],...
+%     [label  '_seqisjump_bin'],[label  '_seqtimes_bin'],[label  '_seqindex_bin'],[label  '_replay_seqmax']);
+
+load(thisdir,[label  '_replay_maxjump'],[label  '_replay_corr'],[label  '_replay_seqmax'],[label  '_replay_seqreplayindex'],[label  '_replay_seqtimes'],[label  '_replay_singlebothjoint'])
+
+% eval(['seqphase = ' label  '_seqphases;'])
+eval(['seq = ' label  '_replay_seqmax;'])
+% eval(['seqisjump_bin = ' label '_seqisjump_bin;'])
+eval(['seqtimes_bin = ' label '_replay_seqtimes;'])
+eval(['seqindex_bin = ' label '_replay_seqreplayindex;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['Rcorr = ' label  '_replay_corr;'])
+eval(['maxJD = ' label  '_replay_maxjump;'])
+% clear([label '_seqindex_btwn'],[label '_seqisjumpbin'] , [label '_seqstepst'] ...
+%     , [label '_seqjumpdist'], [label '_seqtimes_btwn'],[label '_replay_singlebothjoint'])
+
+% Rind = singlebothjoint==3 | abs(Rcorr)<.2;
+Rind = singlebothjoint==3 | abs(Rcorr)<.3 | maxJD>.4;
+seqtimes_bin(ismember(seqindex_bin,find(Rind))) = [];
+% seqisjump_bin(ismember(seqindex_bin,find(Rind))) = [];
+seq(ismember(seqindex_bin,find(Rind))) = [];
+seqindex_bin(ismember(seqindex_bin,find(Rind))) = [];
+
+% load('C2.mat','sequence','ind','times')
+% seq = sequence';
+% seqindex_bin = ind;
+% seqtimes_bin = times';
+
+% hovjumpdegree_cell = []; 
+allinc = []; allincPFC= []; inc1 = []; allincPFC1 = []; allincPFC2 = [];
+for ievent = 1:max(seqindex_bin)
+    if sum(seqindex_bin==ievent)==0
+        continue
+    end
+    
+    move = [0;abs(diff(seq(seqindex_bin==ievent)))>1.25];
+
+    ttimes1 = seqtimes_bin(seqindex_bin==ievent);    
+    ttimes2 = [ttimes1;ttimes1(end)+.005];
+    section1 = cumsum(move)+1;   
+    
+    pphase = NaN(length(move),1);    
+    for ibin = 1:length(move)
+        dat = deg2rad(spikephaseHP(spikephaseHP(:,1)>=ttimes1(ibin) & spikephaseHP(:,1)<(ttimes1(ibin)+.02),2));
+        if ~isempty(dat)
+            r = sum(exp(1i*dat),1);
+            ph = mod(((angle(r)/pi)*180)+360,360);
+           pphase(ibin,1) = ph; 
+        end
+    end
+    
+    
+    section2 = section1;
+    
+    if 1
+    %whole jump at end, continuous
+    section1 = section2-move;    
+    for isect =max(section1):-1:1
+        sectind = section1==isect;     
+        if sum(sectind)<4
+            section1(find(section1==isect,1,'first'):end) = section1(find(section1==isect,1,'first'):end)-1;            
+        end
+    end
+    ston = min(section1);
+    ndon = max(section1);
+    section = section1;
+    end
+    
+    if 0
+    %whole jump at start, continuous
+    section1 = section2;    
+    for isect = 2:max(section1)
+        section1(find(section1==isect,1,'first'):end) = section1(find(section1==isect,1,'first'):end)-1;
+    end
+    section = section1;
+    ston = min(section1);
+    ndon = max(section1);
+    end
+            
+%     
+    if  0
+% %     jump at end (1)
+    section = section1-move;
+    if move(end) == 1
+        ndon = max(section);
+    else
+        ndon = max(section)-1;
+    end
+    ston = 1;
+    end
+%     
+     if 0
+% %         jump at start (0)
+        section = section1;    
+        ston = 2;
+        if move(end) == 0
+            ndon = max(section);
+        else
+            ndon = max(section)-1;
+        end
+    end
+
+    
+    incr = cumsum(~[0;diff(section)])'; 
+    inc = NaN(size(incr));  
+    
+    if length(unique(section))>1
+        for isect = ston:ndon %2:endon  % can change to test whether start of replay is producing this
+            sectind = section==isect;     
+           if sum(sectind)>2
+              inc(sectind) = ((incr(sectind)-min(incr(sectind)))./(max(incr(sectind))-min(incr(sectind))))*359+1;  %1 thru 360
+              sspikes = spikephase(spikephase(:,1)>min(ttimes2(sectind)) & spikephase(:,1)<(ttimes2(find(sectind,1,'last'))+.005),:);  
+               if ~isempty(sspikes)
+                   [~,~,i] = histcounts(sspikes(:,1),[ttimes2(sectind);ttimes2(find(sectind,1,'last'))+.005]);    
+                   sss = ((sspikes(:,1)-min(ttimes2(sectind)))./range([ttimes2(sectind);ttimes2(find(sectind,1,'last'))+.005]))*359+1;
+                   pp = pphase(sectind);
+                   allincPFC2 = cat(1,allincPFC2,[sss pp(i) sspikes(:,3) sspikes(:,2)]);
+               end
+           end
+        end
+        
+        for isect = min(section)+1:max(section)-1
+%            jmp1 = find(section==isect,1,'last');
+%            before = find(section==isect,1,'first');
+%            after = find(section==(isect+1),1,'last');
+%            if jmp1~=before && jmp1~=after
+%                thisind = section==isect | section == (isect+1);
+%                portion = NaN(sum(thisind),1);
+%                portion(1:jmp1-before+1) = (before-(before:jmp1))./(before-jmp1);
+%                portion(jmp1-before+1:after-before+1) = (jmp1-(jmp1:after))./(jmp1-after)+1;
+%                if sum(portion==0)>1
+%                    disp('wait')
+%                end
+%                inc1 = cat(1,inc1,portion);  %1-2
+%                sspikes = spikephase(spikephase(:,1)>min(ttimes2(thisind)) & spikephase(:,1)<ttimes2(find(thisind,1,'last'))+.005,:);  
+%                if ~isempty(sspikes)
+%                    [~,c,i] = histcounts(sspikes(:,1),[ttimes2(thisind);ttimes2(find(thisind,1,'last'))+.005]);        
+%                    allincPFC1 = cat(1,allincPFC1,[portion(i(i>0)) sspikes(:,2)]);
+%                end
+%            end
+            jmp1 = find(section==isect,1,'last');
+            before = jmp1-2;
+            after = jmp1+2;
+            if before>0 && after<=length(section)
+                thisind = before:after;
+                inc1 = cat(1,inc1,[thisind-min(thisind)+1]');
+                sspikes = spikephase(spikephase(:,1)>ttimes2(thisind(1)) & spikephase(:,1)<(ttimes2(thisind(end))+.005),:);  
+               if ~isempty(sspikes)
+                   [~,~,i] = histcounts(sspikes(:,1),[ttimes2(thisind);ttimes2(thisind(end))+.005]);        
+                   allincPFC1 = cat(1,allincPFC1,[[thisind(i(i>0))-min(thisind)+1]' sspikes(:,2)]);
+               end
+            end                           
+           
+           
+           
+        end
+        
+    end
+    
+    sspikes = spikephase(spikephase(:,1)>min(ttimes2) & spikephase(:,1)<max(ttimes2),:);  
+    [~,~,i] = histcounts(sspikes(:,1),ttimes2);        
+    allinc = cat(1,allinc,inc');
+    allincPFC = cat(1,allincPFC,[inc(i)' pphase(i) sspikes(:,3) sspikes(:,2)]); % 'angle' of hover-jump step, hp phase at step, local gamma phase of spikes, cell id            
+    
+end
+
+ind2 = 1:max(inc1)+1;
+% hh1 = histcounts(allinc,ind);
+[hh2,~,~] = histcounts(inc1,ind2);
+% h1 = histcounts(allincPFC(allincPFC(:,2)==pfc(10),1),0:.1:1);
+
+exclude = any(isnan(allincPFC2),2);
+allincPFC2(exclude,:) = [];
+allcells = NaN(length(pfc),3);
+allcells1 = NaN(length(pfc),length(ind2)-1);
+for icell = 1:length(pfc)
+%     [h1,c] = histcounts(allincPFC(allincPFC(:,4)==pfc(icell),2),ind);
+%     allcells(icell,2) = circ_r([deg2rad(ind)]',h1', diff(deg2rad(ind)));    
+%     h1 = histcounts(allincPFC(allincPFC(:,4)==pfc(icell),1),ind)./hh1;
+% %     h1(isnan(h1)) = 0;
+%     allcells(icell,1) = circ_r([deg2rad(c)]',h1', diff(deg2rad(c)));    
+%     [h1,c] = histcounts(allincPFC(allincPFC(:,4)==pfc(icell),3),ind);    
+%     allcells(icell,3) = circ_r([deg2rad(c)]',h1', diff(deg2rad(c))); 
+    if ~isempty(allincPFC2)
+        dat = allincPFC2(allincPFC2(:,4)==pfc(icell),1);
+        if sum(~isnan(dat))>spikecutoff
+            allcells(icell,1) = circ_r(deg2rad(dat(~isnan(dat))));
+        end
+        dat = allincPFC2(allincPFC2(:,4)==pfc(icell),2);        
+        if sum(~isnan(dat))>spikecutoff
+            allcells(icell,2) = circ_r(deg2rad(dat(~isnan(dat))));
+        end
+         dat = allincPFC2(allincPFC2(:,4)==pfc(icell),3);
+        if sum(~isnan(dat))>spikecutoff
+            allcells(icell,3) = circ_r(deg2rad(dat(~isnan(dat))));
+        end        
+    end
+    if ~isempty(allincPFC1)
+        allcells1(icell,:) = histcounts(allincPFC1(allincPFC1(:,2)==pfc(icell),1),ind2)./hh2;
+    end
+end
+% circ_r(deg2rad(allinc(~isnan(allinc))))
+nanmean(allcells)
+% median(allcells)
+% disp('wait')
+% 
+% 
+% 
+% 
+% figure; hold on
+% sem = nanstd(zscore(allcells'),[],2)./sqrt(size(allcells,1));
+% meandat = nanmean(zscore(allcells'),2);
+% rev = meandat-sem;
+% plot(meandat,'k','LineWidth',2)
+% patch([1:10 10:-1:1],[meandat+sem;rev(end:-1:1)],'black','FaceAlpha',.3,'EdgeAlpha',0)
+% 
+% r2 = corr([1:10]',allcells');
+% nanmean(r2);
+% figure; plot(nanmean(zscore(allcells'),2))
+% r = corr([1:10]',allcells')
+% disp('wait')
+% r = corr([1:10]',[h1./hh1]')
+% figure; plot(nanmean(zscore(h1./hh1,[],2)))
+
+% j = nanmean(hh,1)./h;
+% figure; plot(j)
+% %%
+% figure; circ_plot(deg2rad(hovjumpdegree_cell(hovjumpdegree_cell(:,2)==pfc(10),1)),'hist',[],20,true,true,'linewidth',2,'color','r')

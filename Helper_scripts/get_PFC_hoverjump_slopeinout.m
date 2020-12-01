@@ -1,0 +1,143 @@
+function [allcells,r] = get_PFC_hoverjump_slopeinout(thisdir,label)
+
+load(thisdir,'other_cells','spikedata')
+pfc = other_cells; clear other_cells
+spiketimes = spikedata(ismember(spikedata(:,2),pfc),1:2); clear spikedata
+
+load(thisdir,[label  '_replay_maxjump'],[label  '_replay_corr'],[label  '_replay_seqmax'],[label  '_replay_seqreplayindex'],[label  '_replay_seqtimes'],[label  '_replay_singlebothjoint'])
+
+eval(['seq = ' label  '_replay_seqmax;'])
+eval(['seqtimes_bin = ' label '_replay_seqtimes;'])
+eval(['seqindex_bin = ' label '_replay_seqreplayindex;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['Rcorr = ' label  '_replay_corr;'])
+eval(['maxJD = ' label  '_replay_maxjump;'])
+
+Rind = singlebothjoint==3 | abs(Rcorr)<.3 | maxJD>.6;
+seqtimes_bin(ismember(seqindex_bin,find(Rind))) = [];
+seq(ismember(seqindex_bin,find(Rind))) = [];
+seqindex_bin(ismember(seqindex_bin,find(Rind))) = [];
+
+
+allinc = []; allincPFC= []; allincPFCW = []; allincW = []; allmove = []; allcellsmove = [];
+for ievent = 1:max(seqindex_bin)
+    if sum(seqindex_bin==ievent)==0
+        continue
+    end
+    
+    move = [0;abs(diff(seq(seqindex_bin==ievent)))>1.25];
+    mvmnt = [0;abs(diff(seq(seqindex_bin==ievent)))];
+
+    ttimes1 = seqtimes_bin(seqindex_bin==ievent);    
+    ttimes2 = [ttimes1;ttimes1(end)+.005];
+    section1 = cumsum(move)+1;        
+    
+    
+    section2 = section1;
+    
+    if 0
+    %whole jump at end, continuous
+    section1 = section2-move;    
+    for isect =max(section1):-1:1
+        sectind = section1==isect;     
+        if sum(sectind)<4
+            section1(find(section1==isect,1,'first'):end) = section1(find(section1==isect,1,'first'):end)-1;            
+        end
+    end
+    ston = min(section1);
+    ndon = max(section1);
+    section = section1;
+    end
+    
+    if 0
+    %whole jump at start, continuous
+    section1 = section2;    
+    for isect = 2:max(section1)
+        section1(find(section1==isect,1,'first'):end) = section1(find(section1==isect,1,'first'):end)-1;
+    end
+    section = section1;
+    ston = min(section1);
+    ndon = max(section1);
+    end
+            
+%     
+    if 1
+% %     jump at end (1)
+    section = section1-move;
+    if move(end) == 1
+        ndon = max(section);
+    else
+        ndon = max(section)-1;
+    end
+    ston = 1;
+    end
+%     
+     if 0
+% %         jump at start (0)
+        section = section1;    
+        ston = 2;
+        if move(end) == 0
+            ndon = max(section);
+        else
+            ndon = max(section)-1;
+        end
+    end
+
+    
+    incr = cumsum(~[0;diff(section)])'; 
+    inc = NaN(size(incr));  
+    
+    hadone = false;
+    if length(unique(section))>1
+        for isect = ston:ndon %2:endon  % can change to test whether start of replay is producing this
+            sectind = section==isect;     
+           if sum(sectind)>4
+              inc(sectind) = ((incr(sectind)-min(incr(sectind)))./(max(incr(sectind))-min(incr(sectind))));  %1 thru 360
+              sspikes = spiketimes(spiketimes(:,1)>min(ttimes2(sectind)) & spiketimes(:,1)<(ttimes2(find(sectind,1,'last'))+.005),:);  
+               if ~isempty(sspikes)                   
+                   sss = ((sspikes(:,1)-min(ttimes2(sectind)))./range([ttimes2(sectind);ttimes2(find(sectind,1,'last'))+.005]));                   
+                   allincPFC = cat(1,allincPFC,[sss sspikes(:,2)]);
+               end
+               hadone = true;
+           end
+        end
+           
+        if hadone
+            incW = ([1:length(inc)]-1)./(length(inc)-1);
+           sspikes = spiketimes(spiketimes(:,1)>min(ttimes2) & spiketimes(:,1)<ttimes2(end),:);  
+           [~,~,i] = histcounts(sspikes(:,1),ttimes2);
+           if ~isempty(sspikes)                   
+               sss = ((sspikes(:,1)-min(ttimes2))./range(ttimes2));               
+               allincPFCW = cat(1,allincPFCW,[sss sspikes(:,2)]); % mvmnt(i)]);
+           end       
+           allmove = cat(1,allmove,mvmnt);
+           allcellsmove1 = zeros(length(mvmnt),length(pfc));
+           for ii = 1:length(i)
+               allcellsmove1(i(ii),pfc==sspikes(ii,2)) = allcellsmove1(i(ii),pfc==sspikes(ii,2))+1;
+           end
+           allcellsmove = cat(1,allcellsmove,allcellsmove1);
+           allinc = cat(1,allinc,inc');
+           allincW = cat(1,allincW,incW');    
+        end
+    end
+    
+    
+end
+
+ind = 0:.1:1;
+
+% [hh1,~,~] = histcounts(allinc,ind);
+% [hh2,~,~] = histcounts(allincW,ind);
+allcells = NaN(length(pfc),length(ind)-1,2);
+if ~isempty(allincPFC)    
+    for icell = 1:length(pfc)    
+        allcells(icell,:,1) = histcounts(allincPFC(allincPFC(:,2)==pfc(icell),1),ind);    
+        allcells(icell,:,2) = histcounts(allincPFCW(allincPFCW(:,2)==pfc(icell),1),ind);        
+    end        
+end
+% allmove = [allmove allincW];
+if ~isempty(allmove)
+    r = partialcorr(allcellsmove,allmove,allincW);
+else
+    r = NaN(length(pfc),1);
+end

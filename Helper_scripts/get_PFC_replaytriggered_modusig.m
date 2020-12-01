@@ -1,0 +1,142 @@
+function get_PFC_replaytriggered_modusig(thisdir,label,ilab)
+disp('Start get_PFC_replaytriggered_modusig')
+load(thisdir,[label '_replay_singlebothjoint'],[label '_replay_replayarm'], ...
+    [label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],'other_cells',[label  '_replay_shuffle_p']...
+    ,[label  '_replay_corr'],[label  '_replay_maxjump'],[label  '_replay_armcov'],[label '_PFCcandspikes_binned'],[label '_PFCcandspikes_list'],...
+    [label '_Cand_sig_modu_include'],[label '_CandEventAssign'])
+
+
+eval(['PFCcandspikes_binned = ' label '_PFCcandspikes_binned;'])
+eval(['PFCcandspikes_list = ' label '_PFCcandspikes_list;'])
+eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['replayarm = ' label '_replay_replayarm;'])
+eval(['corr = ' label '_replay_corr;'])
+eval(['armcov1 = ' label  '_replay_armcov;'])
+eval(['sigmoduinclude = ' label '_Cand_sig_modu_include;'])
+eval(['shuffle_p = ' label  '_replay_shuffle_p;'])
+eval(['mj = ' label  '_replay_maxjump;'])
+eval(['wc = ' label  '_replay_corr;'])
+eval(['CandEventAssign = ' label '_CandEventAssign;'])
+clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+CandEventAssign(end) = [];
+pfc = other_cells; clear other_cells
+
+%all single replays %doing this earlier now
+% PFCreplayspikes_binned(:,:,singlebothjoint==3) = [];
+% PFCreplayspikes_list(ismember(PFCreplayspikes_list(:,3),find(singlebothjoint==3)),:) = [];
+
+% replayarm = replayarm(singlebothjoint~=3 & shuffle_p<.05); 
+% replayarm = replayarm(singlebothjoint~=3); %changed 2/4/19
+
+% replaylab = {'AllArmEvents';'All.3Events';'AllSigEvents';'All.3SigEvents';'All.5SigEvents';'All.5Events'}; 'All.3SigEvents_JD.6';'All.5SigEvents';'All.6SigEvents_JD.4'};
+% replaylab = {'AllArmEvents';'All.3Events_armcov3';'AllSigEvents_ArmCov3';'All.3SigEventsArmcov5';'All.5SigEventsArmcov5'}; 
+% replaylab = {'AllArmEvents';'Wc3ArmCov3';'WC4ArmCov5mj7';'WC5ArmCov5mj4'};
+
+% issig = ~isnan(replayarm) & (singlebothjoint==1 | singlebothjoint==2);
+% touseR22 = CandEventAssign==0;
+% 
+% replayevent1 = NaN(size(replayarm));
+% replayevent1(~issig) = 1;
+% replayevent1(issig) = 2;
+
+replayevent = NaN(size(CandEventAssign));
+replayevent(CandEventAssign==0) = 1;
+replayevent(CandEventAssign>0) = 2;
+
+nS = 2000;
+% nS = 20;
+
+binsize = .02;
+window = [-2 2];
+% ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+ind = [window(1):binsize:window(2)];
+modind1 = [0 .2];
+baseind1 = [-.5 -.1];
+
+modind = ind>=modind1(1) & ind<=(modind1(2));
+baseind = ind>=baseind1(1) & ind<=baseind1(2);
+
+% modu = NaN(3,length(pfc));
+modu2 =  NaN(2,length(pfc));
+p_SSD = NaN(length(pfc),1);
+% SSD_obs1 = p_SSD; SSD_obs2 = p_SSD;
+
+IND = ~isnan(replayevent);
+ra = replayevent(IND);
+replayarmShSave = replayevent;
+for i=1:nS
+    replayarmSh = replayevent;
+    replayarmSh(IND) = ra(randperm(size(ra,1)));
+    while any(sum(replayarmShSave(~isnan(replayevent),:)~=replayarmSh(~isnan(replayevent)))==0) %sum(replayarmSh(~isnan(replayarmSh))~=replayevent(~isnan(replayevent)))==0
+        replayarmSh = replayevent(randperm(size(replayevent,1)));
+%         disp(['triggeredsame i = ' num2str(i)])
+    end
+    replayarmShSave = cat(2,replayarmShSave,replayarmSh);
+end
+replayarmShSave = replayarmShSave(:,2:end);
+        
+% rb = cat(3,PFCreplayspikes_binned,PFCcandspikes_binned(:,:,touseR22));
+rb = PFCcandspikes_binned;
+
+for icell = 1:length(pfc)
+    
+    mm = NaN(2,1);
+    mcount = NaN(2,1);
+    for iarm = 1:2        
+%        m1 = squeeze(sum(PFCreplayspikes_binned(icell,modind,replayevent==iarm),2))./range(modind1);
+%         b1 = squeeze(sum(PFCreplayspikes_binned(icell,baseind,replayevent==iarm),2))./range(baseind1);
+        m = squeeze(squeeze(sum(rb(icell,modind,replayevent==iarm),2)./range(modind1)));
+        b = squeeze(sum(rb(icell,baseind,replayevent==iarm),2)./range(baseind1));
+%         modu(iarm,icell) = nanmean(m-b);
+        modu2(iarm,icell) = (nanmean(m)-nanmean(b))/(nanmean(m)+nanmean(b));
+        mm(iarm,:) = nanmean(m-b); %nanmean(m-b)/nanmean(m+b); %nanmean(m-b);
+%         mm(iarm,:) = (m-b)./(m+b);
+    %     mm(iarm,:) = (m1-(mean(b1)))./sum(replayevent==iarm); %baseline subtract?
+        mcount(iarm) = sum(squeeze(sum(rb(icell,modind | baseind,replayevent==iarm),3)));
+    end
+    
+    if sum(mcount)>50  %&& sum(mcount>50)>1
+        
+       if sigmoduinclude(icell,2)<0
+           SSD_obs = mm(1,:)-mm(2,:);
+       else
+           SSD_obs = mm(2,:)-mm(1,:);
+       end
+           
+%        SSD_obs2 = modu2(2,icell)-modu2(1,icell);
+        
+
+        SSD_sh = zeros(nS,1);
+        
+       
+        for i = 1:nS
+            ms = NaN(3,1);
+            for iarm = 1:2
+                m = sum(rb(icell,modind,replayarmShSave(:,i)==iarm),2)./range(modind1);      
+                b = nanmean(sum(rb(icell,baseind,replayarmShSave(:,i)==iarm),2)./range(baseind1));
+%                 ms(iarm,:) = (m-b)./(m+b);
+                ms(iarm,:) = nanmean(m-b); %nanmean(m-b)/nanmean(m+b); %nanmean(m-b);
+            end
+            if sigmoduinclude(icell,2)<0
+                SSD_sh(i,1) = ms(1,:)-ms(2,:);
+            else
+               SSD_sh(i,1) = ms(2,:)-ms(1,:);
+            end
+            
+        end
+
+        p_SSD(icell,1) = (sum(SSD_sh>=SSD_obs)+1)/(nS+1);
+%         SSD_obs1(icell,1) = SSD_obs;
+%         SSD_obs2(icell,1) = SSD_obs2a;
+    else
+        p_SSD(icell,1) = NaN; 
+%         SSD_obs1(icell,1) = NaN;
+    end
+      
+end
+
+eval([label '_pSSDreplay = p_SSD;'])
+save(thisdir,[label '_pSSDreplay'],'-append')
+disp('Done with get_PFC_replaytriggered_modusig')
