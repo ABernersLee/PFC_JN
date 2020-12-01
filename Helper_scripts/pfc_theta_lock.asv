@@ -1,0 +1,48 @@
+function [mus,m] = pfc_theta_lock(thisdir,toplot)
+load(thisdir,'HPTheta_spikephase','armpos','vel','dirdat','other_cells','hp_cells','hpinterneurons') %,'theta_globalzero')
+velcutoff = 10;
+
+hpcells = hp_cells(~ismember(hp_cells,hpinterneurons));
+hp_spks = HPTheta_spikephase(ismember(HPTheta_spikephase(:,2),hpcells),:);
+m = NaN(length(hpcells),1);
+for icell = 1:length(hpcells)
+     m(icell) = circ_mean(deg2rad(hp_spks(hp_spks(:,2)==hpcells(icell) & hp_spks(:,3)>velcutoff,6)));
+end
+% % close all
+% figure; hold on; subplot(1,4,1)
+% a= circ_plot(m,'hist',[],20,true,true,'linewidth',2,'color','r');
+% mx= circ_mean(m);
+% subplot(1,4,2)
+% b= circ_plot(m-mx,'hist',[],20,true,true,'linewidth',2,'color','r');
+
+
+% load(['F:\XY_matdata\AllDays\matfiles\theta_sequence_zero.mat'],'theta_sequence_zero')
+pfcspks = HPTheta_spikephase(ismember(HPTheta_spikephase(:,2),other_cells),:); %-theta_sequence_zero;
+pfcspks(:,6) = pfcspks(:,6); %-rad2deg(mx);
+clear HPTheta_spikephase
+% mus = NaN(length(other_cells),3,3);
+mus = NaN(length(other_cells),5);
+% for iarm = 1:3
+   for icell = 1:length(other_cells)
+       
+%       mus(icell,iarm,1) = circ_r(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+%           & vel(pfcspks(:,3))>velcutoff & armpos(pfcspks(:,3))==iarm & dirdat(pfcspks(:,3))==0,6))); 
+%       
+%       mus(icell,iarm,2) = circ_r(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+%           & vel(pfcspks(:,3))>velcutoff & armpos(pfcspks(:,3))==iarm & dirdat(pfcspks(:,3))==1,6))); 
+      
+      mus(icell,1) = circ_r(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+          & vel(pfcspks(:,3))>velcutoff,6))); 
+       mus(icell,2:3) = circ_rtest(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+          & vel(pfcspks(:,3))>velcutoff,6))); 
+      mus(icell,4) = circ_mean(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+          & vel(pfcspks(:,3))>velcutoff,6))); 
+      mus(icell,5) = circ_kappa(deg2rad(pfcspks(pfcspks(:,2)==other_cells(icell) ...
+          & vel(pfcspks(:,3))>velcutoff,6))); 
+   end
+% end
+
+% subplot(1,4,3)
+% c= circ_plot(mus(:,4),'hist',[],20,true,true,'linewidth',2,'color','r');
+% subplot(1,4,4)
+% d= circ_plot(mus(:,4)-mx,'hist',[],20,true,true,'linewidth',2,'color','r');

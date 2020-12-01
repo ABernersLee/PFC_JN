@@ -1,0 +1,61 @@
+function plot_PFC_Event_triggered(thisdir,label,withmodpatch,smoothsize)
+%%
+load(thisdir,[label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],'other_cells',[label '_Cand_sig_modu_include'])
+
+eval(['Cand_sig_modu_include = ' label '_Cand_sig_modu_include;'])
+eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+pfc = other_cells; clear other_cells
+
+if strcmp(label,'SD')
+    xlab = 'Hippocampal Spike Density Event';
+    ylab = 'Spike Density Event Number';
+elseif strcmp(label,'RP')
+    xlab = 'Hippocampal Ripple';
+    ylab = 'Ripple Number';
+end
+binsize = .002;
+window = [-.5 .5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+smoothsize = 20;
+withmodpatch = true;
+%%
+for icell = 1:length(pfc)
+
+    dat = squeeze(mean(PFCreplayspikes_binned(icell,:,:),3));
+    sem = squeeze(std(PFCreplayspikes_binned(icell,:,:),[],3))./sqrt(size(PFCreplayspikes_binned,3));
+    rev = dat+sem;
+    sm = smoothts([dat dat dat dat],'b',smoothsize);
+    modind = [ind(ind>0 & ind<=.2)];
+    baseind = [ind(ind>=-.5 & ind<-.1)];
+    
+    figure; hold on
+    subplot(2,1,1), hold on
+%     line([PFCreplayspikes_list(PFCreplayspikes_list(:,2)==pfc(icell),1) PFCreplayspikes_list(PFCreplayspikes_list(:,2)==p(icell),1)]',[PFCreplayspikes_list(PFCreplayspikes_list(:,2)==p(icell),3)-.5 PFCreplayspikes_list(PFCreplayspikes_list(:,2)==p(icell),3)+.5]','Color','k','LineWidth',3)
+    plot(PFCreplayspikes_list(PFCreplayspikes_list(:,2)==pfc(icell),1)+window(1),PFCreplayspikes_list(PFCreplayspikes_list(:,2)==pfc(icell),3),'.k','MarkerSize',3)
+    xlim(window)
+    ylim([0 size(PFCreplayspikes_binned,3)])
+    yl = get(gca,'ylim');
+    plot([0 0], yl,':','Color',[.5 .5 .5],'LineWidth',3)
+    set(gca,'xtick',[-.5 -.25 0 .25 .5],'xticklabel',[-500 -250 0 250 500])
+    xlabel(['Time From Start of ' xlab ' (ms)'])
+    ylabel(ylab)
+    set(gca,'FontSize',18,'FontName','Helvetica')
+
+    subplot(2,1,2), hold on
+    patch([ind ind(end:-1:1)],[dat-sem rev(end:-1:1)],'black','FaceAlpha',.1,'EdgeAlpha',.1)
+    plot(ind,sm(length(dat)*2:length(dat)*3-1)./binsize,'k','LineWidth',2)
+    yl = get(gca,'ylim');
+    plot([0 0], yl,':','Color',[.5 .5 .5],'LineWidth',3)
+    if withmodpatch
+        patch([modind modind(end:-1:1)],[ones(size(modind))*yl(1) ones(size(modind))*yl(2)],'red','FaceAlpha',.1,'EdgeAlpha',.1)
+        patch([baseind baseind(end:-1:1)],[ones(size(baseind))*yl(1) ones(size(baseind))*yl(2)],'blue','FaceAlpha',.1,'EdgeAlpha',.1)
+    end
+    set(gca,'xtick',[-.5 -.25 0 .25 .5],'xticklabel',[-500 -250 0 250 500])
+    xlabel(['Time From Start of ' xlab ' (ms)'])
+    ylabel('Firing Rate (Hz)')
+    set(gcf,'Position',[2271        -103         730        1099])
+    set(gca,'FontSize',18,'FontName','Helvetica')
+    helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\' label '_
+end

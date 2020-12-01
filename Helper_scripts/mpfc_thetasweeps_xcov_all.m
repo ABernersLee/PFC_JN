@@ -1,0 +1,112 @@
+
+binsize = .02; wind = .06; 
+xcov1 = [];
+xcovr = [];
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;
+%     [xcovlaps,lags] = mpfc_thetasweeps_xcov(thisdir,binsize,wind,cutoff);
+    xcovlaps = mpfc_hp_prediction_xcov(thisdir,binsize,wind);
+    xcov1 = cat(1,xcov1,xcovlaps);
+    xcovr = cat(1,xcovr,nanmean(xcovlaps));
+    disp(num2str(id))
+end
+disp('Done')
+
+figure; hold on
+dat = xcov1;lags = -wind:wind/round((size(dat,2)/2)-1):wind;
+numb = sum(~isnan(dat),1);
+sem = nanstd(dat)./sqrt(numb);
+rev = nanmean(dat)+sem;        
+patch([lags lags(end:-1:1)],[nanmean(dat)-sem rev(end:-1:1)],'black','FaceAlpha',.2,'EdgeAlpha',0)
+xlim([min(lags) max(lags)])
+yl = get(gca,'ylim');
+plot([0 0],yl,'k--')
+% lgs = get(gca,'xtick');
+plot(lags,nanmean(dat),'k')
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Theta\Predict_HP_mPFC_xcov_binsize' num2str(binsize) '_wind' num2str(wind)])
+
+figure; hold on
+dat = xcovr;lags = -wind:wind/round((size(dat,2)/2)-1):wind;
+plot(lags,nanmean(dat))
+numb = sum(~isnan(dat),1);
+sem = nanstd(dat)./sqrt(numb);
+rev = nanmean(dat)+sem;        
+patch([lags lags(end:-1:1)],[nanmean(dat)-sem rev(end:-1:1)],'black','FaceAlpha',.2,'EdgeAlpha',0)
+xlim([min(lags) max(lags)])
+yl = get(gca,'ylim');
+plot([0 0],yl,'k--')
+lgs = get(gca,'xtick');
+plot(lags,nanmean(dat),'k')
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Theta\Predict_HP_mPFC_xcovMeans_binsize' num2str(binsize) '_wind' num2str(wind)])
+    
+%%
+
+binsize = .02; wind = .06; cutoff = .34;
+xcov1 = [];
+xcovr = [];
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;
+    [xcovlaps,lags] = mpfc_thetasweeps_xcov(thisdir,binsize,wind,cutoff);
+    xcov1 = cat(1,xcov1,xcovlaps);
+    xcovr = cat(1,xcovr,nanmean(xcovlaps));
+    disp(num2str(id))
+end
+disp('Done')
+
+typelab = {'Predicts the same way as Theta Sweep & Chosen Arm';'Predicts the same way as Theta sweep';'Predicts the same way as chosen arm'};
+stndlab = {'- Start';'- End';'- Middle'};
+% p = patch([ind ind(end:-1:1)],[fwd rev(end:-1:1)],'black');
+for itype = 1:3
+    for stnd = 1:3
+        figure; hold on
+        dat = xcov1(:,:,itype,stnd);
+        numb = sum(~isnan(dat),1);
+        sem = nanstd(dat)./sqrt(numb);
+        rev = nanmean(dat)+sem;        
+        patch([lags lags(end:-1:1)],[nanmean(dat)-sem rev(end:-1:1)],'black','FaceAlpha',.2,'EdgeAlpha',0)
+        xlim([min(lags) max(lags)])
+        plot([min(lags) max(lags)],[0 0],'k')
+        lgs = get(gca,'xtick');
+        set(gca,'xticklabels',lgs*binsize)
+        plot(lags,nanmean(dat),'k')
+        
+        title([typelab{itype} ' ' stndlab{stnd}])
+        helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Theta\Sweeps_mPFC_xcov_cutoff' num2str(cutoff) '_binsize' num2str(binsize) '_wind' num2str(wind) ' ' typelab{itype} ' ' stndlab{stnd}])
+    end
+end
+
+typelab = {'Predicts the same way as Theta Sweep & Chosen Arm';'Predicts the same way as Theta sweep';'Predicts the same way as chosen arm'};
+stndlab = {'- Start';'- End';'- Middle'};
+% p = patch([ind ind(end:-1:1)],[fwd rev(end:-1:1)],'black');
+for itype = 1:3
+    for stnd = 1:3
+        figure; hold on
+        dat = xcovr(:,:,itype,stnd);
+        numb = sum(~isnan(dat),1);
+        sem = nanstd(dat)./sqrt(numb);
+        rev = nanmean(dat)+sem;        
+        patch([lags lags(end:-1:1)],[nanmean(dat)-sem rev(end:-1:1)],'black','FaceAlpha',.2,'EdgeAlpha',0)
+        xlim([min(lags) max(lags)])
+        plot([min(lags) max(lags)],[0 0],'k')
+        lgs = get(gca,'xtick');
+        set(gca,'xticklabels',lgs*binsize)
+        plot(lags,nanmean(dat),'k')
+        
+        title([typelab{itype} ' ' stndlab{stnd}])
+        helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Theta\Sweeps_mPFC_xcovMeans_cutoff' num2str(cutoff) '_binsize' num2str(binsize) '_wind' num2str(wind) ' ' typelab{itype} ' ' stndlab{stnd}])        
+    end
+end
+%%
+
+dat = xcov1(:,:,1,2);
+p = NaN(size(dat,2),1);
+for ii = 1:size(dat,2)
+    
+        p(ii) = signrank(dat(:,ii));
+end
+%%
+dat2 = dat(:,5:7);
+% dat3 = dat(:,8:end);
+pp = ranksum(dat2(:),0,'tail','right')
+pp = signrank(dat2(:))
+% pp = ranksum(dat2(:),dat3(:))

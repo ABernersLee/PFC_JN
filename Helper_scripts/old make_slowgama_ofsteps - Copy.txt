@@ -1,0 +1,105 @@
+%old, saving in case want to revisit
+%thought i had to deal with type here, but i shouldnt have to
+
+function make_slowgama_ofsteps(thisdir,label)
+
+load(thisdir,[label  '_seqisjumpbin'],[label  '_seqstepst'],[label  '_seqtimes_btwn'],...
+    [label  '_seqindex_btwn'],'slowgamma_localspikephase','other_cells','hp_cells','hpinterneurons',...
+    [label '_CandEventTimes']) %,[label  '_replay_stnd'])
+
+% eval(['singlebothjoint = ' label  '_replay_singlebothjoint;'])
+eval(['seqindex = ' label  '_seqindex_btwn;'])
+eval(['seqtimes = ' label  '_seqtimes_btwn;'])
+eval(['Cand = ' label  '_replay_stnd;'])
+clear([label  '_seqtimes_btwn'])
+clear([label  '_seqindex_btwn;'])
+clear([label  '_replay_singlebothjoint;'])
+% clear([label  '_replay_stnd;'])
+
+% if ~isempty(type)
+%     touse = singlebothjoint==type;
+%     Cand(~touse,:) = [];
+%     touseseq = ismember(seqindex,find(touse));
+%     seqtimes(~touseseq) = [];    
+% end
+
+gspk = slowgamma_localspikephase(ismember(slowgamma_localspikephase(:,2),hp_cells(~ismember(hp_cells,hpinterneurons))),:);
+PFCspk = slowgamma_localspikephase(ismember(slowgamma_localspikephase(:,2),other_cells),:);
+
+
+%HP spikes to get slow gamma and spikes
+[~,I] = histc(gspk(:,1),sortrows(Cand(:)));
+gspk(~mod(I,2),:)=[];
+clear I
+
+[so,o] = sortrows(seqtimes);
+[~,I] = histc(gspk(:,1),so);
+gspk(I==0,:) = [];
+I(I==0) = [];
+
+%PFC spikes
+[~,I2] = histc(PFCspk(:,1),sortrows(Cand(:)));
+PFCspk(~mod(I2,2),:)=[];
+clear I2
+
+[so2,o2] = sortrows(seqtimes);
+[~,I2] = histc(PFCspk(:,1),so2);
+I2(I2==0) = [];
+Is2 = unique(I2);
+
+%get for each seq transition bin
+Is = unique(I);
+seqphases = NaN(size(seqtimes));
+seqHPspikes = zeros(size(seqtimes));
+seqPFCspikes = seqHPspikes;
+for ii = 1:length(Is)
+    seqHPspikes(o(Is(ii))) = sum(I==Is(ii));    
+    alpha = deg2rad(gspk(I==Is(ii),5));
+    r = sum(exp(1i*alpha),1);
+    ph = mod(((angle(r)/pi)*180)+360,360);
+    seqphases(o(Is(ii))) = ph;
+end
+
+for ii = 1:length(Is2)
+    seqPFCspikes(o2(Is2(ii))) = sum(I2==Is2(ii));
+end
+    
+
+
+%save things, deal with the type thing
+
+
+%%
+%quick look at gamma modulation
+
+eval(['isjump = ' label  '_seqisjumpbin;'])
+eval(['isjumpst = ' label  '_seqstepst;'])
+
+sm = 15;
+[~,~,i] = histcounts(seqphases,0:(360/numbins):360);
+clear meanss; for ideg = 1:numbins; meanss(ideg,1) = mean(seqHPspikes(i==ideg)); end
+output = smoothts([meanss;meanss;meanss;meanss]','b',sm);
+o1 = output(length(meanss)+1:(3*length(meanss)));
+
+clear meanss; for ideg = 1:numbins; meanss(ideg,1) = mean(isjump(i==ideg)==0); end
+output = smoothts([meanss;meanss;meanss;meanss]','b',sm);
+o2 = output(length(meanss)+1:(3*length(meanss)));
+
+clear meanss; for ideg = 1:numbins; meanss(ideg,1) = mean(seqPFCspikes(i==ideg)); end
+output = smoothts([meanss;meanss;meanss;meanss]','b',sm);
+o3 = output(length(meanss)+1:(3*length(meanss)));
+
+clear meanss; for ideg = 1:numbins; meanss(ideg,1) = mean(isjumpst(i==ideg)==1); end
+output = smoothts([meanss;meanss;meanss;meanss]','b',sm);
+o4 = output(length(meanss)+1:(3*length(meanss)));
+
+clear meanss; for ideg = 1:numbins; meanss(ideg,1) = mean(isjumpst(i==ideg)==-1); end
+output = smoothts([meanss;meanss;meanss;meanss]','b',sm);
+o5 = output(length(meanss)+1:(3*length(meanss)));
+
+figure; hold on, 
+plot(zscore(o1),'k','LineWidth',3), 
+plot(zscore(o2),'r','LineWidth',3); 
+plot(zscore(o3),'g','LineWidth',3);
+plot(zscore(o4),'b','LineWidth',3);
+% plot(zscore(o5),'c','LineWidth',3);

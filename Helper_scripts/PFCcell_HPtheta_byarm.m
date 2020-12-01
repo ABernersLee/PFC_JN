@@ -1,0 +1,72 @@
+function PFCcell_HPtheta_byarm(velcutoff,binsize)
+
+cd('D:\XY_matdata\AllDays\')
+d2 = dir('*.mat');
+dlab = {'In';'Out'};
+
+for idir = 1:size(d2,1)
+    cd('D:\XY_matdata\AllDays\')
+    load(d2(idir).name,'HPTheta_spikephase','pos','armpos','dirdat','vel','other_cells','linposcat','Rat_Name','Date','dirname')
+    
+%     [~,~,bin2] = histcounts(T(:,1),pos(:,1));       
+    [~,~,bin2] = histcounts(HPTheta_spikephase(:,1),pos(:,1));       
+    T = HPTheta_spikephase(vel(bin2)>velcutoff,:); clear HPTheta_spikephase
+%     Tl = linposcat(bin2);
+    p = pos(vel>velcutoff,:); clear pos
+    a = armpos(vel>velcutoff,:); clear armpos
+    d = dirdat(vel>velcutoff,:); clear dirdat        
+%     Tll = Tl(vel>velcutoff); clear Tl clear Tl
+    l = linposcat(vel>velcutoff,:); clear linposcat    
+    
+    T(T(:,1)<p(1,1),:) = [];
+    T(T(:,1)>p(end,1),:) = [];
+    
+    [~,~,bin] = histcounts(T(:,1),p(:,1));       
+    
+    
+    armtheta_mrv = NaN(3,3,length(other_cells));
+    armtheta_mu = armtheta_mrv;
+    armtheta_slope = NaN(3,2,3,length(other_cells));
+    Tl = l(bin);
+    
+    for icell = 1:length(other_cells)
+        figure; hold on        
+        for iarm = 1:max(a)
+            if sum(a(bin)==iarm & T(:,2)==other_cells(icell))>10
+                dat = deg2rad(T(a(bin)==iarm & T(:,2)==other_cells(icell),end));
+                armtheta_mrv(1,iarm,icell) = circ_r(dat);                
+                armtheta_mu(1,iarm,icell)  =abl_circ_mean_ci(dat);
+               for id = 1:2 
+                   if sum(a(bin)==iarm & d(bin)==id-1 & T(:,2)==other_cells(icell))>10
+                        dat = deg2rad(T(a(bin)==iarm & d(bin)==id-1 & T(:,2)==other_cells(icell),end));
+                        armtheta_mrv(1+id,iarm,icell) = circ_r(dat);
+                        armtheta_mu(1+id,iarm,icell)  =abl_circ_mean_ci(dat,[],[],[],[],1);
+                        subplot(3,2,iarm*2+(id-2)), hold on
+                        dat1 = Tl(a(bin)==iarm & d(bin)==id-1 & T(:,2)==other_cells(icell));
+                        if id==1, dat1 = -dat1; end                        
+                        dat2 = T(a(bin)==iarm & d(bin)==id-1 & T(:,2)==other_cells(icell),end);
+                        plot([dat1 dat1],[dat2 dat2+360],'.k')
+                        [~,sl,mu2,p] = get_pp_slope(dat1,dat2,deg2rad(binsize));
+                        armtheta_slope(1,id,iarm,icell) = sl;
+                        armtheta_slope(2,id,iarm,icell) = rad2deg(mu2);
+                        armtheta_slope(3,id,iarm,icell) = p;
+                        tt = title(['MRV = ' num2str(round(armtheta_mrv(1+id,iarm,icell),2,'significant')) ...
+                            ' mu = ' num2str(round(armtheta_mu(1+id,iarm,icell),2,'significant')) ...
+                            ', slope = ' num2str(round(sl,2,'significant')) ...
+                            ' shift = ' num2str(round(rad2deg(mu2),2,'significant')) ...
+                            ' p = ' num2str(round(p,2,'significant'))]);  
+                        if p<.05, tt.Color = 'r'; end
+
+                        if iarm==3, xlabel(dlab{id}), end
+                        if id == 1,ylabel(['Arm ' num2str(iarm)]), end
+                        ylim([0 720])
+                   end
+               end
+            end
+        end
+        suptitle([dirname ' ' Rat_Name ' ' num2str(Date) ' Cell ' num2str(other_cells(icell))])
+        set(gcf,'Position',[ 2072          -7        1162         902])
+        helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\PhasePrecession\' dirname '_' Rat_Name '_' num2str(Date) '_Cell ' num2str(other_cells(icell))])
+    end    
+    save(d2(idir).name,'armtheta_slope','armtheta_mrv','armtheta_mu','-append')        
+end
