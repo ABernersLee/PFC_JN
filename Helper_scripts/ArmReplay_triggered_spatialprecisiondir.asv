@@ -1,0 +1,350 @@
+function ArmReplay_triggered_spatialprecisiondir(dirs,igroup,savefolder)
+cd(dirs.homedir)
+d2 = dir('*.mat');
+dirlab = {'In';'Out'};
+hpALL = []; pfcALL = [];
+for idir = 1:2
+    hp = []; pfc = []; sig = []; tp = []; tpi = [];
+
+    for id = 1:size(d2,1)
+
+        load(d2(id).name,'other_cells','other_cells_touse','RP_pSSDarm','spatialprecisiondir','hpinterneurons','hp_cells')
+        p_SSD = RP_pSSDarm;
+        pfc1 = other_cells(other_cells_touse(:,igroup));
+        sig_pfc = p_SSD(other_cells_touse(:,igroup));
+        hp1 = hp_cells(~ismember(hp_cells,hpinterneurons));
+        prec_hp = spatialprecisiondir.prec(hp1,:,idir);
+        prec_pfc = spatialprecisiondir.prec(pfc1,:,idir);
+        toplot = spatialprecisiondir.toplot(:,:,idir);
+        toplotind1 = spatialprecisiondir.toplotind(:,:,idir);
+
+        toplotind = NaN(size(toplotind1,1),4);
+        toplotind(hp1,1) = 1;
+        toplotind(pfc1,1) = 2;
+        toplotind(other_cells(other_cells_touse(:,igroup)),2) = p_SSD(other_cells_touse(:,igroup));
+        toplotind(:,3:4) = toplotind1;
+
+
+        hp = cat(1,hp,prec_hp);
+        pfc = cat(1,pfc,prec_pfc);
+        sig = cat(1,sig,sig_pfc);
+        tp = cat(1,tp,toplot');
+        tpi = cat(1,tpi,toplotind);
+    %     disp(id)
+    end
+
+    load(d2(id).name,'armposindex')
+    newcol = [75 0 130;34 139 34;255 130 0]/255;
+    Filter=fspecial('gaussian',[3 1],1); %was [3 1],1
+    figure; hold on
+    for iarm = 1:3
+
+        subplot(2,3,iarm); hold on
+        tppfc = tp(tpi(:,1)==2 & tpi(:,2)<.05 & tpi(:,4)==iarm,armposindex(:,iarm));
+        iii = 0; 
+        [~,m] = max(tppfc,[],2);
+        [~,s] = sortrows(m);
+        dat = tppfc(s,:);
+
+        for ii = 1:size(dat,1)
+            iii = iii+1;
+            dat2 = dat(ii,:)';
+            dat2 = fillmissing(dat2,'linear');
+            smdat = filter(Filter,1,dat2);
+            dat3 = ((smdat-min(smdat))./(max(smdat)-min(smdat)))+iii-1;        
+            k = patch([1:size(dat3,1) size(dat3,1):-1:1]',[(iii-1)*ones(size(dat3));dat3(end:-1:1)]','black','EdgeAlpha',0);
+            k.FaceColor = newcol(iarm,:);
+        end
+        axis tight
+        subplot(2,3,iarm+3); hold on
+        tphp = tp(tpi(:,1)==1 & tpi(:,4)==iarm,armposindex(:,iarm));
+        iii = 0; pnum = size(dat,1);
+        [~,m] = max(tphp,[],2);
+        [~,s] = sortrows(m);
+        dat = tphp(s,:); 
+
+        for ii =8:ceil(size(tphp,1)/pnum):size(dat,1)
+            iii = iii+1;
+            dat2 = dat(ii,:)';
+            dat2(isinf(dat2)) = NaN;
+            dat2 = fillmissing(dat2,'linear');
+            smdat = filter(Filter,1,dat2);
+            dat3 = ((smdat-min(smdat))./(max(smdat)-min(smdat)))+iii-1;        
+            k = patch([1:size(dat3,1) size(dat3,1):-1:1]',[(iii-1)*ones(size(dat3));dat3(end:-1:1)]','black','EdgeAlpha',0);
+            k.FaceColor = newcol(iarm,:);
+        end    
+        axis tight
+    end
+    if ~isfolder([savefolder '\Figure2\'])
+            mkdir([savefolder '\Figure2\'])
+    end
+    set(gcf,'renderer','Painters')
+    helper_saveandclosefig([savefolder '\Figure2\precision_fields_' dirlab{idir}])
+
+
+    
+    smbinlab = {'Smoothed';'Binned'};
+    for smoothbinned = 1:2
+        tppfc1 = NaN(sum(tpi(:,1)==2 & tpi(:,2)<.05),3);
+        for iarm = 1:3
+            tppfc1(:,iarm) = nanmean(tp(tpi(:,1)==2 & tpi(:,2)<.05,armposindex(:,iarm)),2);
+        end    
+        [~,m] = max(tppfc1,[],2);
+        tppfc01 = tp(tpi(:,1)==2 & tpi(:,2)<.05,:);
+
+        iii = 0;     
+        figure; hold on
+        subplot(2,1,1); hold on
+        for iarm2 = 1:3
+            tppfc0 = tp(tpi(:,1)==2 & tpi(:,2)<.05,armposindex(:,iarm2));
+            tppfc00 = tppfc0(m==iarm2,:);
+            [~,m2] = max(tppfc00,[],2);
+            [~,s] = sortrows(m2);
+
+            tppfc00 = tppfc01(m==iarm2,:);        
+            dat = tppfc00(s,:);            
+            for ii = 1:size(dat,1)      
+                iii = iii+1; aa = 0;
+                if smoothbinned == 1
+                    datarm = NaN(size(dat,2),1);
+                else
+                    datarm = NaN(53,1);
+                end
+                armsz = NaN(size(datarm,1),1);
+                for iarm = 1:3                   
+                    dat2 = dat(ii,armposindex(:,iarm))';
+                    if smoothbinned == 1
+    %                     dat2 = fillmissing(dat2,'linear');
+                        dat2(isnan(dat2)) = 0;
+                        smdat = filter(Filter,1,dat2);
+                        datarm(armposindex(:,iarm)) = smdat;
+                        armsz(armposindex(:,iarm)) = iarm;
+                    elseif smoothbinned == 2     
+                        if rem(length(dat2),3)==0
+                            smdat = nanmean([dat2(1:3:end) dat2(2:3:end) dat2(3:3:end)],2);
+                        else
+                            smdat = nanmean([dat2(1:3:end-rem(length(dat2),3)) dat2(2:3:end-rem(length(dat2),3)-1) dat2(3:3:end)],2);
+                        end
+                        smdat = fillmissing(smdat,'linear');
+                        datarm(aa+1:aa+length(smdat)) = smdat;                    
+                        armsz(aa+1:aa+length(smdat)) = iarm;
+                    end
+                    aa = aa+length(smdat);                
+                end
+
+                for iarm = 1:3
+    %                 armind = find(armposindex(:,iarm));
+                    armind = find(armsz==iarm); %[aa:aa+armsz(iarm)]';
+                    dat3 = ((datarm(armind)-min(datarm))./(max(datarm)-min(datarm)))+iii-1;             
+                    k = patch([armind;armind(end:-1:1)],[(iii-1)*ones(size(dat3));dat3(end:-1:1)]','black','EdgeAlpha',0);
+                    k.FaceColor = newcol(iarm,:);                                
+                end
+            end        
+        end
+        axis tight
+        ylabel('PFC Cells')
+        xlabel('Binned Position')
+        set(gca,'FontSize',18)
+        title([smbinlab{smoothbinned} ' FR as a function of decoded position within replays'])    
+
+        subplot(2,1,2); hold on
+        % tphp1 = tp(tpi(:,1)==1,:);
+        % [~,m] = max(tphp1,[],2);
+        % [~,s] = sortrows(m);
+        pnum = size(tppfc01,1);    
+        iii = 0;
+        tphp1 = NaN(sum(tpi(:,1)==1),3);
+        for iarm = 1:3
+            tphp1(:,iarm) = nanmean(tp(tpi(:,1)==1,armposindex(:,iarm)),2);
+        end    
+        [~,m] = max(tphp1,[],2);
+        tphp01 = tp(tpi(:,1)==1,:);
+
+        for iarm2 = 1:3
+            tphp0 = tp(tpi(:,1)==1,armposindex(:,iarm2));
+            tphp00 = tphp0(m==iarm2,:);
+            [~,m2] = max(tphp00,[],2);
+            [~,s] = sortrows(m2);
+
+            tphp00 = tphp01(m==iarm2,:);        
+            dat = tphp00(s,:);            
+            for ii = 1:ceil(size(tphp01,1)/pnum):size(dat,1) 
+               iii = iii+1; aa = 0;            
+                if smoothbinned == 1
+                    datarm = NaN(size(dat,2),1);
+                else
+                    datarm = NaN(53,1);
+                end
+                armsz = NaN(size(datarm,1),1);
+                for iarm = 1:3                    
+                    dat2 = dat(ii,armposindex(:,iarm))';
+                    if smoothbinned == 1
+            %             dat2 = fillmissing(dat2,'linear');
+                        dat2(isnan(dat2)) = 0;
+                        smdat = filter(Filter,1,dat2);
+                        datarm(armposindex(:,iarm)) = smdat;
+                        armsz(armposindex(:,iarm)) = iarm;
+                    elseif smoothbinned == 2     
+                        if rem(length(dat2),3)==0
+                            smdat = nanmean([dat2(1:3:end) dat2(2:3:end) dat2(3:3:end)],2);
+                        else
+                            smdat = nanmean([dat2(1:3:end-rem(length(dat2),3)) dat2(2:3:end-rem(length(dat2),3)-1) dat2(3:3:end)],2);
+                        end
+                        smdat = fillmissing(smdat,'linear');
+                        datarm(aa+1:aa+length(smdat)) = smdat;                    
+                        armsz(aa+1:aa+length(smdat)) = iarm;
+                    end
+                    aa = aa+length(smdat);                                
+                end
+
+                for iarm = 1:3
+    %                 armind = find(armposindex(:,iarm));
+                    armind = find(armsz==iarm); %[aa:aa+armsz(iarm)]';
+                    dat3 = ((datarm(armind)-min(datarm))./(max(datarm)-min(datarm)))+iii-1;             
+                    k = patch([armind;armind(end:-1:1)],[(iii-1)*ones(size(dat3));dat3(end:-1:1)]','black','EdgeAlpha',0);
+                    k.FaceColor = newcol(iarm,:);                                
+                end
+            end        
+        end
+        axis tight
+        ylabel('HP Cells')
+        xlabel('Binned Position')    
+        set(gca,'FontSize',18)
+
+        set(gcf,'renderer','Painters','Position',[1921        -799        1080        1803])
+
+        helper_saveandclosefig([savefolder '\Figure2\precision_fields_full_' smbinlab{smoothbinned} '_' dirlab{idir}])
+    end
+
+
+
+    
+    rawlab = {'Raw','Smoothed'};
+    siglab = {'SigOnly';'AllPFC'};
+    for isig = 1:2
+        if isig==1; pfc2 = pfc(sig<.05,:); elseif isig==2; pfc2 = pfc;end        
+        for iraw = 1:2
+            figure; hold on
+
+            % h = histogram(sel_hp,1:37,'Normalization','probability','LineWidth',1,'DisplayStyle','stairs'); 
+            % hold on; histogram(sel_pfc,1:37,'Normalization','probability','LineWidth',1,'DisplayStyle','stairs');
+            h1 = histcounts(hp(:,iraw),1:2:15)'; 
+            h2 = histcounts(pfc2(:,iraw),1:2:15)'; 
+            [p,h,stats] = ranksum(hp(:,iraw),pfc2(:,iraw)) %,'tail','right');
+            h1 = [h1; sum(hp(:,iraw)>15)];
+            h2 = [h2; sum(pfc2(:,iraw)>15)];
+            b = bar([h1./sum(h1) h2./sum(h2)],'LineWidth',2,'BarWidth',1);
+            b(2).FaceColor = [0 0 0];
+            b(1).FaceColor = [1 1 1];
+            set(gca,'xtick',1:15,'xticklabel',[1:2:15 15])
+            % bar(1:37,h1./1sum(h1),'FaceColor','k','FaceAlpha',.5,'EdgeAlpha',1)
+            % bar(1:37,h2./sum(h2),'FaceColor','r','FaceAlpha',.5,'EdgeAlpha',1)
+            legend('hp','pfc')
+            ylabel('Probability (Count/Total)')
+            xlabel('Spatial Selectivity (Max/Mean)')
+            set(gca,'FontSize',18)
+            title([rawlab{iraw} ' ' siglab{isig} ' p = ' num2str(p) ' z = ' num2str(stats.zval)])
+            axis tight
+            set(gcf,'renderer','Painters')
+            helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_prob_ ' rawlab{iraw} '_' siglab{isig} '_' dirlab{idir}])
+        end
+    end
+
+
+    rawlab = {'Raw','Smoothed'};
+    siglab = {'SigOnly';'AllPFC'};
+    isig = 1;
+    if isig==1; pfc2 = pfc(sig<.05,:); elseif isig==2; pfc2 = pfc;end        
+    iraw = 2;
+    figure; hold on
+    h1 = histcounts(hp(:,iraw),1:.5:3)'; 
+    h2 = histcounts(pfc2(:,iraw),1:.5:3)'; 
+    [p,h,stats] = ranksum(hp(:,iraw),pfc2(:,iraw)); %,'tail','right');
+    h1 = [h1; sum(hp(:,iraw)>3)];
+    h2 = [h2; sum(pfc2(:,iraw)>3)];
+    b = bar([h1./sum(h1) h2./sum(h2)],'LineWidth',2,'BarWidth',1);
+    b(2).FaceColor = [0 0 0];
+    b(1).FaceColor = [1 1 1];
+    set(gca,'xtick',1:5,'xticklabel',[1:.5:3 3])
+    % bar(1:37,h1./1sum(h1),'FaceColor','k','FaceAlpha',.5,'EdgeAlpha',1)
+    % bar(1:37,h2./sum(h2),'FaceColor','r','FaceAlpha',.5,'EdgeAlpha',1)
+    legend('hp','pfc')
+    ylabel('Probability (Count/Total)')
+    xlabel('Spatial Selectivity (Max/Mean)')
+    set(gca,'FontSize',18)
+    title([rawlab{iraw} ' ' siglab{isig} ' p = ' num2str(p) ' z = ' num2str(stats.zval)])
+    axis tight
+    set(gcf,'renderer','Painters')
+    helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_prob_ ' rawlab{iraw} '_' siglab{isig} '_2_' dirlab{idir}])
+    
+    hpALL = cat(3,hpALL,hp);
+    pfcALL = cat(3,pfcALL,pfc);
+end
+%%
+hp = mean(hpALL,3); pfc2 = mean(pfcALL,3);
+ rawlab = {'Raw','Smoothed'};
+siglab = {'SigOnly';'AllPFC'};
+isig = 1;
+for iraw = 1:2
+    figure; hold on
+    h1 = histcounts(hp(:,iraw),1:.5:3)'; 
+    h2 = histcounts(pfc2(sig<.05,iraw),1:.5:3)'; 
+    [p,h,stats] = ranksum(hp(:,iraw),pfc2(sig<.05,iraw)); %,'tail','right');
+    h1 = [h1; sum(hp(:,iraw)>3)];
+    h2 = [h2; sum(pfc2(sig<.05,iraw)>3)];
+    b = bar([h1./sum(h1) h2./sum(h2)],'LineWidth',2,'BarWidth',1);
+    b(2).FaceColor = [0 0 0];
+    b(1).FaceColor = [1 1 1];
+    set(gca,'xtick',1:5,'xticklabel',[1:.5:3 3])
+    % bar(1:37,h1./1sum(h1),'FaceColor','k','FaceAlpha',.5,'EdgeAlpha',1)
+    % bar(1:37,h2./sum(h2),'FaceColor','r','FaceAlpha',.5,'EdgeAlpha',1)
+    legend('hp','pfc')
+    ylabel('Probability (Count/Total)')
+    xlabel('Spatial Selectivity (Max/Mean)')
+    set(gca,'FontSize',18)
+    title([rawlab{iraw} ' ' siglab{isig} ' p = ' num2str(p) ' z = ' num2str(stats.zval)])
+    axis tight
+    set(gcf,'renderer','Painters')
+    helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_prob_ ' rawlab{iraw} '_' siglab{isig} '_2_BothDir'])
+
+    figure; hold on
+    h1 = histcounts(hp(:,iraw),1:2:15)'; 
+    h2 = histcounts(pfc2(sig<.05,iraw),1:2:15)'; 
+    [p,h,stats] = ranksum(hp(:,iraw),pfc2(sig<.05,iraw)); % ,'tail','right');
+    h1 = [h1; sum(hp(:,iraw)>15)];
+    h2 = [h2; sum(pfc2(sig<.05,iraw)>15)];
+    b = bar([h1./sum(h1) h2./sum(h2)],'LineWidth',2,'BarWidth',1);
+    b(2).FaceColor = [0 0 0];
+    b(1).FaceColor = [1 1 1];
+    set(gca,'xtick',1:15,'xticklabel',[1:2:15 15])
+    % bar(1:37,h1./1sum(h1),'FaceColor','k','FaceAlpha',.5,'EdgeAlpha',1)
+    % bar(1:37,h2./sum(h2),'FaceColor','r','FaceAlpha',.5,'EdgeAlpha',1)
+    legend('hp','pfc')
+    ylabel('Probability (Count/Total)')
+    xlabel('Spatial Selectivity (Max/Mean)')
+    set(gca,'FontSize',18)
+    title([rawlab{iraw} ' ' siglab{isig} ' p = ' num2str(p) ' z = ' num2str(stats.zval)])
+    axis tight
+    set(gcf,'renderer','Painters')
+    helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_prob_ ' rawlab{iraw} '_' siglab{isig} '_BothDir'])
+
+    incl = ~isnan(sig) & ~isnan(pfc2(:,iraw));
+    [r,p] = corr(sig(incl),pfc2(incl,iraw));
+    figure; hold on;
+    text(0,1,['Correlation between sig pval and spatial selectivity ' rawlab{iraw} ':'])
+    text(0,.5,['r = ' num2str(r) ' p = ' num2str(p)])
+    axis off
+    helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_BothDir_corr_ ' rawlab{iraw}])
+    
+    for idir = 1:2
+        pfc3 = pfcALL(:,iraw,idir);
+           incl = ~isnan(sig) & ~isnan(pfc3(:));
+        [r,p] = corr(sig(incl),pfc3(incl));
+        figure; hold on;
+        text(0,1,['Correlation between sig pval and spatial selectivity ' rawlab{iraw} ':'])
+        text(0,.5,['r = ' num2str(r) ' p = ' num2str(p)])
+        axis off
+        helper_saveandclosefig([savefolder '\Figure2\precision_selectivity_corr_ ' rawlab{iraw} '_' dirlab{idir}])  
+    end
+      
+end

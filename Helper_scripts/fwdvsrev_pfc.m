@@ -1,0 +1,132 @@
+function alldatz = fwdvsrev_pfc(thisdir,label,igroup)
+load(thisdir,'other_cells_touse',[label '_replay_singlebothjoint'],[label '_Cand_sig_modu_include'], ...
+    [label '_PFCreplayspikes_binned'],[label '_PFCreplayspikes_list'],[label  '_replay_shuffle_p']...
+    ,[label  '_replay_corr'],[label  '_pSSDarm'],[label  '_replay_dirbias'],[label  '_replay_stnd'],[label  '_replay_replayarm'],'pos','armpos')
+
+
+eval(['PFCreplayspikes_binned = ' label '_PFCreplayspikes_binned;'])
+eval(['PFCreplayspikes_list = ' label '_PFCreplayspikes_list;'])
+eval(['singlebothjoint = ' label '_replay_singlebothjoint;'])
+eval(['Cand_sig_modu_include = ' label '_Cand_sig_modu_include;'])
+eval(['dirbias = ' label '_replay_dirbias;'])
+eval(['corrs = ' label '_replay_corr;'])
+eval(['replayarm = ' label '_replay_replayarm;'])
+eval(['stnd = ' label '_replay_stnd;'])
+eval(['pSSD = ' label '_pSSDarm;'])
+
+eval(['shuffle_p = ' label  '_replay_shuffle_p;'])
+clear([label '_PFCreplayspikes_list'],[label '_PFCreplayspikes_binned'],[label '_Cand_sig_modu_include'])
+
+% pfc = other_cells; clear other_cells
+% tolook = [singlebothjoint [0;diff(singlebothjoint==2)]];
+
+% touse = singlebothjoint~=3 & shuffle_p<.05;
+touse = singlebothjoint~=3; %changed 2/4/19
+
+% 1 is pure inbound, -1 is pure outbound
+dirbias = dirbias(touse);
+
+% outbound is positive, inbound is negative
+corrs = corrs(touse);
+
+% sbj = singlebothjoint(touse);
+rarm = replayarm(touse);
+
+[~,ii] = histc(stnd(touse,1),pos(:,1));
+
+
+% fwd = rarm~=armpos(ii) & dirbias<0 & corrs>.3; %sig
+% rev = rarm==armpos(ii) & dirbias>0 & corrs>.3; %sig
+
+% fwd = rarm~=armpos(ii) & corrs>.3; %sig
+% rev = rarm==armpos(ii) & corrs>.3; %sig
+
+% fwd = rarm~=armpos(ii) & corrs>0; %sig
+% rev = rarm==armpos(ii) & corrs>0; %sig
+
+% fwd = dirbias<0; %sig
+% rev = dirbias>0; %sig
+
+% fwd = dirbias<0 & abs(corrs)>.5; %sig
+% rev = dirbias>0 & abs(corrs)>.5; %sig
+
+% fwd = (rarm~=armpos(ii) & dirbias<0 & corrs>0) | (rarm==armpos(ii) & dirbias<0 & corrs<0); % sig vs ~
+% rev = ~fwd; %sig
+
+% fwd = (rarm~=armpos(ii) & corrs>0) | (rarm==armpos(ii) & corrs<0); % sig 
+% rev = (rarm~=armpos(ii) & corrs<0) | (rarm==armpos(ii) & corrs>0); %sig
+
+fwd = (rarm==armpos(ii) & corrs<0); % sig 
+rev = (rarm~=armpos(ii) & corrs<0) | (rarm==armpos(ii) & corrs>0); %sig
+
+% fwd = (rarm~=armpos(ii)) | (rarm==armpos(ii) & corrs<0); % sig vs ~
+% rev = ~fwd; %sig
+
+% fwd = rarm==armpos(ii) & corrs<0; %sig
+% rev = rarm==armpos(ii) & corrs>0; %sig
+
+
+%inbound and inbound, outbound and outbound
+% fwd = (dirbias>.5 & corrs<0) | (dirbias<-.5 & corrs>0);
+% fwd = (dirbias>.3 & corrs<0) | (dirbias<-.3 & corrs>0);
+% fwd = (dirbias>0 & corrs<0) | (dirbias<0 & corrs>0);
+% fwd = (dirbias<-.3 & corrs>0);
+% fwd = dirbias<0 & corrs>0;
+% fwd = corrs>0;
+% fwd = sbj==2;
+% fwd = rarm~=armpos(ii) & abs(corrs)>.3;
+% fwd = rarm~=armpos(ii) & ((dirbias>0 & corrs<-.3) | (dirbias<0 & corrs>.3));
+
+%inbound and outbound, outbound and inbound
+% rev = (dirbias>.5 & corrs>0) | (dirbias<-.5 & corrs<0);
+% rev = (dirbias>.3 & corrs>0) | (dirbias<-.3 & corrs<0);
+% rev = (dirbias>0 & corrs>0) | (dirbias<0 & corrs<0);
+% rev = (dirbias<-.3 & corrs<0);
+% rev = dirbias>0 & corrs>0;
+% rev = corrs<0;
+% rev = sbj == 1;
+% rev = ~fwd;
+% rev = rarm==armpos(ii) & abs(corrs)>.3;
+% rev = rarm==armpos(ii) & ((dirbias>0 & corrs>.3) | (dirbias<0 & corrs<-.3)); 
+
+modind1 = [0 .2];
+baseind1 = [-.5 -.1];
+binsize = .02;
+window = [-2 2];
+ind = [window(1):binsize:window(2)];
+modind = ind>=modind1(1) & ind<=(modind1(2));
+baseind = ind>=baseind1(1) & ind<=baseind1(2);
+
+% cellstouse = Cand_sig_modu_include(:,3)==1 & Cand_sig_modu_include(:,1)==1 & Cand_sig_modu_include(:,2)>0;
+% cellstouse = Cand_sig_modu_include(:,3)==1 & Cand_sig_modu_include(:,1)==1 & Cand_sig_modu_include(:,2)<0;
+% cellstouse = Cand_sig_modu_include(:,2)<0;
+% cellstouse = Cand_sig_modu_include(:,3)==1;
+cellstouse = pSSD<.05 & other_cells_touse(:,igroup);
+% cellstouse = Cand_sig_modu_include(:,2)<0 & Cand_sig_modu_include(:,1)==1 & Cand_sig_modu_include(:,3)==1;
+% updown = NaN(size(Cand_sig_modu_include,1),1);
+% updown(Cand_sig_modu_include(:,2)<0) = -1;
+% updown(Cand_sig_modu_include(:,2)>0) = 1;
+% cellstouse = Cand_sig_modu_include(:,1)==1;
+% updown= updown(cellstouse);
+
+% cellstouse = true(size(Cand_sig_modu_include,1),1);
+% cellstouse = Cand_sig_modu_include(:,3)==1 & Cand_sig_modu_include(:,1)==1;
+
+if sum(cellstouse)>0
+    dat = squeeze(nanmean(PFCreplayspikes_binned(cellstouse,modind,:),2)./range(modind1))-squeeze(nanmean(PFCreplayspikes_binned(cellstouse,baseind,:),2)./range(baseind1));
+    datz = nanzscore(dat,[],2);    
+%     datz(updown==-1,:) = nanzscore(-dat(updown==-1,:),[],2);
+%     datz = abs(datz);
+    if sum(cellstouse)==1
+        fwddatz = datz(fwd);
+        revdatz = datz(rev);
+        alldatz = [mean(fwddatz) mean(revdatz)];
+    else
+        fwddatz = datz(:,fwd);
+        revdatz = datz(:,rev);
+        alldatz = [mean(fwddatz,2) mean(revdatz,2)];
+    end
+%     alldatz(Cand_sig_modu_include(:,2)<0,:) = -alldatz(Cand_sig_modu_include(:,2)<0,:);
+else
+    alldatz = [];
+end

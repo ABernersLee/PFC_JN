@@ -1,0 +1,57 @@
+function make_PFC_eventtriggeredmat(thisdir,label)
+
+
+load(thisdir,[label '_replay_stnd'],'other_cells','spikedata')
+
+eval(['Event = ' label '_replay_stnd(:,1);'])
+clear([label '_replay_stnd'])
+p = other_cells; clear other_cells
+
+%%
+PFCspk = spikedata(ismember(spikedata(:,2),p),1:2); 
+nS = 4000;
+modwin = .2;
+
+binsize = .005;
+window = [-.5 .5];
+ind = [window(1)+(binsize/2):binsize:window(2)-(binsize/2)];
+
+E = [Event+window(1) Event+window(2)];
+B = cumsum([0 diff(E')]);
+
+[~,I] = histc(PFCspk(:,1),sortrows(E(:)));
+
+k = (rand(1,nS)-.5);
+PFCspkSh = NaN(size(PFCspk,1),nS);
+PFCspkR = PFCspk;
+for i = 1:2:max(I)
+    PFCspkSh(I==i,:) = repmat((PFCspk(I==i,1)-Event(ceil(i/2),1)),[1 nS])+ones(sum(I==i),1)*k;
+    PFCspk(I==i,1) = PFCspk(I==i,1)-E(ceil(i/2),1)+B(ceil(i/2));    
+    PFCspkR(I==i,1) = PFCspkR(I==i,1)-Event(ceil(i/2),1);        
+end
+PFCspk(~mod(I,2),:)=[];
+PFCspkSh(~mod(I,2),:)=[];
+PFCspkR(~mod(I,2),:)=[];
+PFCspkSh(PFCspkSh<-.5) = 1+PFCspkSh(PFCspkSh<-.5); %ones that got negative should wrap around to be positive
+PFCspkSh(PFCspkSh>.5) = 1-PFCspkSh(PFCspkSh>.5); %ones that got negative should wrap around to be positive
+
+rs = NaN(length(p),length(ind)*B(end));
+ShV = NaN(length(p),nS);
+MV = NaN(length(p),1);
+for icell = 1:length(p)    
+    rs(icell,:) = histc(PFCspk(PFCspk(:,2)==p(icell),1),B(1)+binsize/2:binsize:B(end)-binsize/2);  
+    
+    cspk =PFCspkR(PFCspkR(:,2)==p(icell),1);
+    shh = PFCspkSh(PFCspk(:,2)==p(icell),:);
+    ShV(icell,:) = squeeze(sum(shh>=0 & shh<=modwin));
+    MV(icell,1) = sum(cspk>=0 & cspk<=modwin);
+end
+replayPFCspikes = reshape(rs,[size(rs,1) length(ind) B(end)]);
+
+Real = (MV-mean(ShV,2)).^2;
+Shuff = (ShV-mean(ShV,2)).^2;
+
+percent = sum(Real>Shuff,2)/nS;
+sig = percent>.95
+
+figure; plot(squeeze(mean(replayPFCspikes(7,:,:),3)))

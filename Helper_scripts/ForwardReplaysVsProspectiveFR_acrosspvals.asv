@@ -1,0 +1,95 @@
+label = 'RP';
+cd(dirs.homedir)
+d2 = dir('*.mat');
+pvals = [1:-.025:.025];
+r1 = NaN(length(pvals),1); p1 = r1; numcells = r1;
+r2 = r1; p2 = r2;
+for ip = 1:length(pvals)
+Th = []; Fr = []; Re = []; Plain = [];% allarmsig = []; cellname = [];
+
+for id = 1:size(d2,1)
+    load(d2(id).name,'prospectiveTheta_armcombs','prospectiveFR_armcombs',...
+        [label  '_pfcfwdreplaymodu_armXpos'],'prospectiveFR_meanFR') %,'other_cells')
+    
+    load(d2(id).name, [label '_moduarm'],[label '_pSSDarm'],[label '_SSDarm'],[label '_Cand_sig_modu_include'])
+    eval(['armsig = [' label '_pSSDarm ' label '_SSDarm ' label '_Cand_sig_modu_include];'])
+    
+    eval(['pfcfwdreplaymodu_armXpos = ' label '_pfcfwdreplaymodu_armXpos;'])
+
+    
+    touse = armsig(:,1)<pvals(ip);
+
+
+    Fr = [Fr; prospectiveFR_armcombs(touse,:)];
+    Re = [Re; pfcfwdreplaymodu_armXpos(touse,:)];
+    Th = [Th; prospectiveTheta_armcombs(touse,:)];
+    
+end
+
+FrZ = nanzscore(Fr,[],2);
+ReZ = nanzscore(Re,[],2);
+ThZ = nanzscore(Th,[],2);
+
+[r1(ip),p1(ip)] = corr(ReZ(:),FrZ(:),'rows','complete','type','Kendall');
+[r2(ip),p2(ip)] = corr(ReZ(:),ThZ(:),'rows','complete','type','Kendall');
+numcells(ip) = size(ReZ,1);
+end
+% %%
+% figure; 
+% hold on
+% yyaxis right
+% plot(p1)
+% plot([1 length(pvals)],[.05 .05])
+% ylabel('p-value')
+% 
+% yyaxis left
+% plot(r1)
+% ylabel('r')
+% set(gca,'xtick',1:2:length(pvals),'xticklabels',pvals(1:2:end))
+% 
+% figure; 
+% hold on
+% yyaxis right
+% plot(p1)
+% plot([1 length(pvals)],[.05 .05])
+% ylabel('p-value')
+% 
+% yyaxis left
+% plot(numcells)
+% ylabel('Number of Cells')
+% set(gca,'xtick',1:2:length(pvals),'xticklabels',pvals(1:2:end))
+
+%%
+figure; 
+hold on
+yyaxis right
+plot(r1)
+plot(find(p1<.05),r1(p1<.05),'*','LineWidth',3)
+ylabel('Prospective Replay Relationship (r)')
+
+yyaxis left
+plot(numcells)
+ylabel('Number of PFC Cells')
+xlabel('Significance Cutoff for PFC cells')
+set(gca,'xtick',1:2:length(pvals),'xticklabels',pvals(1:2:end))
+set(gca,'FontSize',18)
+xlim([1 length(pvals)])
+set(gcf,'Position',[246         212        1566         730])
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\ArmCombinations\ForwardReplaysVsProspectiveFR_acrosspvals_RP']) 
+%%
+figure; 
+hold on
+yyaxis right
+plot(r2)
+plot(find(p2<.05),r2(p2<.05),'*','LineWidth',3)
+ylabel('Theta - Replay Relationship (r)')
+
+yyaxis left
+plot(numcells)
+ylabel('Number of PFC Cells')
+xlabel('Significance Cutoff for PFC cells')
+set(gca,'xtick',1:2:length(pvals),'xticklabels',pvals(1:2:end))
+set(gca,'FontSize',18)
+xlim([1 length(pvals)])
+set(gcf,'Position',[246         212        1566         730])
+% helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\ArmCombinations\ForwardReplaysVsThetaFR_acrosspvals_RP_mod.2_nobaseline_allevents']) 

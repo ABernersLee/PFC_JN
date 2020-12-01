@@ -1,0 +1,39 @@
+cd('E:\XY_matdata');
+load('dirs.mat')
+
+cd(dirs.homedir)
+d2 = dir('*.mat');
+alldat = NaN(size(d2,1),14);
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;
+    load(thisdir,'hp_cells','other_cells','hpinterneurons','RP_replay_shuffle_p','SD_replay_shuffle_p','pos','laps_singlepass','laps_coverspace','rundat')
+    
+    error2 = Behavior_Decoding_Simple(thisdir);       
+    
+    tm = 0;
+    for irun = 1:size(rundat,2)
+        tm = tm+sum(diff(pos(rundat(:,irun)==1,1)));
+    end
+    armacc = get_behavior_accuracy(thisdir);                     
+    sz = floor(size(armacc,1)/2);
+    h1 = mean(armacc(1:sz,3));
+    h2 = mean(armacc(size(armacc,1)-sz+1:end,3));
+    learnrate = ((h2-h1)/h1)*100;
+    ne = armacc(~isnan(armacc(:,4)),4);
+    sz = floor(size(ne,1)/2);
+    h1 = mean(ne(1:sz));
+    h2 = mean(ne(size(ne,1)-sz+1:end));
+    learnrate2 = ((h2-h1)/h1)*100;
+    
+    alldat(id,:) = [length(setdiff(hp_cells,hpinterneurons)) length(other_cells) ...
+        tm size(rundat,2) max(laps_coverspace) max(laps_singlepass) ...
+        mean(armacc(:,3)) nanmean(armacc(:,4)) learnrate learnrate2...
+        sum(RP_replay_shuffle_p<.05) sum(SD_replay_shuffle_p<.05) mean(error2) median(error2)];
+end
+T = table(alldat(:,1),alldat(:,2),alldat(:,3),alldat(:,4),alldat(:,5),alldat(:,6)...
+    ,alldat(:,7),alldat(:,8),alldat(:,9),alldat(:,10),alldat(:,11),alldat(:,12),alldat(:,13),alldat(:,14));
+T.Properties.VariableNames = {'hp';'pfc';'totaltime';'runs';'laps_coverspace';'laps_singlepass';...
+    'rewardrate';'alternation_accuracy';'learning';'learning_alternation';...    
+    'SigRippleReplay';'SigSDReplay';'MeanError';'MedianError'};
+% save('E:\XY_matdata\Figures\ForPaper\Basics\alldays_alldat_20190126.mat','alldat','T','d2')
+save('E:\XY_matdata\Figures\ForPaper\Basics\alldays_alldat_20190126_new.mat','alldat','T','d2')

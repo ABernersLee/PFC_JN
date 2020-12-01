@@ -1,0 +1,135 @@
+function Figure2_ExpectedVsReal(savefolder,dirs,igroup,sig,revcom)
+if ~sig 
+    toadd = '_allcells';
+else
+    toadd = '_sigcells';
+end
+if revcom
+    toadd = [toadd '_ReviewerCommentVersion'];
+end
+cd(dirs.homedir)
+d2 = dir('*.mat');
+smoothsize = 30; withmodpatch = 1;
+toplot = false;
+rl = []; fk = []; ses = [];
+rts = [1 1 1 2 2 2 2 3 3 3 4];
+%%
+for id = 7:size(d2,1)
+    thisdir = d2(id).name;     
+    if ~revcom
+        [SSDreal,SSDfake] = plot_PFC_ArmReplay_triggered_expected(thisdir,withmodpatch,smoothsize,savefolder,id,toplot,igroup,sig);
+    else
+        [SSDreal,SSDfake] = plot_PFC_ArmReplay_triggered_expected_ReviewerComment(thisdir,withmodpatch,smoothsize,savefolder,id,toplot,igroup,sig);
+    end
+  
+    if ~isempty(SSDreal)
+        if ~revcom
+            fk = cat(1,fk,SSDfake);
+            rl = cat(1,rl,SSDreal);
+        else
+            rl = cat(1,rl,SSDreal(:,1));
+            fk = cat(1,fk,max(SSDfake,[],2)); %for reviewer comment version
+        end
+    end
+    ses = cat(1,ses,[rts(id)*ones(size(SSDreal,1),1) id*ones(size(SSDreal,1),1)]);
+    disp(num2str(id))
+end
+%%
+ses(isnan(rl),:) = [];
+fk(isnan(rl)) = [];
+rl(isnan(rl)) = [];
+
+figure;
+hold on
+% bar(1,mean(fk),'LineWidth',3,'FaceColor','w')
+% bar(2,mean(rl),'LineWidth',3,'FaceColor','w')
+% plot(ones(size(fk)),fk,'.k','MarkerSize',20)
+violinplot1([fk rl],1:2);
+errorbar(1,mean(fk),std(fk)./sqrt(sum(~isnan(fk))),'k','LineWidth',3)
+plot(1,nanmean(fk),'.k','MarkerSize',30)
+% plot(ones(size(rl))*2,rl,'.k','MarkerSize',20)
+% violinplot1(rl,2);
+errorbar(2,mean(rl),std(rl)./sqrt(sum(~isnan(rl))),'k','LineWidth',3)
+plot(2,nanmean(rl),'.k','MarkerSize',30)
+xlim([.5 2.5])
+[p,~,stats] = signrank(rl,fk);
+ylabel('PFC cells'' Arm replay SSD')
+set(gca,'xtick',1.05:2.05,'xticklabel',{'Expected';'Observed'})   
+if isfield(stats,'zval')
+    title(['two-sided signed rank test, p = ' num2str(p) ', z = ' num2str(stats.zval)])
+else
+    title(['two-sided signed rank test, p = ' num2str(p) ', signedrank = ' num2str(stats.signedrank)])
+end
+set(gca,'FontName','Arial')
+set(gcf,'renderer','Painters')
+helper_saveandclosefig([savefolder '\Figure2\ExpectedVsReal_armSSD_violin' toadd])
+
+figure; hold on
+text(.1,.9,['N = ' num2str(length(fk)) ', ' num2str(length(rl))])
+text(.1,.8,['p = ' num2str(p)])
+text(.1,.7,['U = ' num2str(stats.signedrank)])
+text(.1,.6,['theta = ' num2str(stats.signedrank/(length(fk)*length(rl)))])
+if isfield(stats,'zval')
+    text(.1,.5,['zval = ' num2str(stats.zval)])
+end
+helper_saveandclosefig([savefolder '\Figure2\ExpectedVsReal_armSSD_stats' toadd])
+
+rl2 = log10(rl(fk~=0));
+fk2 = log10(fk(fk~=0));
+figure;
+hold on
+% bar(1,mean(fk),'LineWidth',3,'FaceColor','w')
+% bar(2,mean(rl),'LineWidth',3,'FaceColor','w')
+% plot(ones(size(fk)),fk,'.k','MarkerSize',20)
+violinplot1([fk2 rl2],1:2);
+errorbar(1,mean(fk2),std(fk2)./sqrt(sum(~isnan(fk2))),'k','LineWidth',3)
+plot(1,nanmean(fk2),'.k','MarkerSize',30)
+% plot(ones(size(rl2))*2,rl2,'.k','MarkerSize',20)
+% violinplot1(rl2,2);
+errorbar(2,mean(rl2),std(rl2)./sqrt(sum(~isnan(rl2))),'k','LineWidth',3)
+plot(2,nanmean(rl2),'.k','MarkerSize',30)
+xlim([.5 2.5])
+[p,~,stats] = signrank(rl2,fk2);
+ylabel('PFC cells'' Arm replay SSD')
+set(gca,'xtick',1.05:2.05,'xticklabel',{'Expected';'Observed'})    
+if isfield(stats,'zval')
+        title(['two-sided signed rank test, p = ' num2str(p) ', z = ' num2str(stats.zval)])
+    else
+        title(['two-sided signed rank test, p = ' num2str(p) ', signedrank = ' num2str(stats.signedrank)])
+    end
+set(gca,'FontName','Arial')
+set(gcf,'renderer','Painters')
+helper_saveandclosefig([savefolder '\Figure2\ExpectedVsReal_armSSD_violin_log' toadd])
+
+rtlab = {'Rat';'Session'};
+for irt = 1:2
+    ss = unique(ses(:,irt));
+    rl3 = NaN(length(ss),1); fk3 = rl3;
+    for ises = 1:length(ss)
+        rl3(ises) = mean(rl(ses(:,irt)==ss(ises)));
+        fk3(ises) = mean(fk(ses(:,irt)==ss(ises)));
+    end
+    [p,~,stats] = signrank(rl3,fk3);
+
+    figure; hold on
+    plot(1:2,[fk3 rl3],'k')
+    if irt==2
+        plot(1:2,[fk4 rl4],'r')
+    end
+    errorbar(1,mean(fk3),std(fk3)./sqrt(sum(~isnan(fk3))),'k','LineWidth',3)
+    plot(1,nanmean(fk3),'.k','MarkerSize',30)
+    errorbar(2,mean(rl3),std(rl3)./sqrt(sum(~isnan(rl3))),'k','LineWidth',3)
+    plot(2,nanmean(rl3),'.k','MarkerSize',30)
+    xlim([.5 2.5])
+    ylabel([rtlab{irt} ' average PFC cells'' arm replay SSD'])
+    set(gca,'xtick',1.05:2.05,'xticklabel',{'Expected';'Observed'})
+    if isfield(stats,'zval')
+        title(['two-sided signed rank test, p = ' num2str(p) ', z = ' num2str(stats.zval)])
+    else
+        title(['two-sided signed rank test, p = ' num2str(p) ', signedrank = ' num2str(stats.signedrank)])
+    end
+    set(gca,'FontName','Arial')
+    set(gcf,'renderer','Painters')
+    helper_saveandclosefig([savefolder '\Figure2\ExpectedVsReal_armSSD_' rtlab{irt} toadd])
+    rl4 = rl3; fk4 = fk3;
+end

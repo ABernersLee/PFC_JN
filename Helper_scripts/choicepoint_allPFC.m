@@ -1,0 +1,105 @@
+function choicepoint_allPFC(label)
+
+%stats and figures
+
+% are there a significant number of cells that show choice point activity?
+
+% is any significant choice point activity related to caring about arms
+% during replay?
+
+% is choice point activity across arms related to which arms you care about
+% during replay?
+
+% is choice point activity related to how theta locked you are?
+
+cd('D:\XY_matdata\AllDays')
+d2 = dir('*.mat');
+modu = []; p_SSD = []; SSD = []; smi = []; CH_pSSD= []; mrv = []; CH_apSSD= []; ppp= [];
+for id = 1:size(d2,1)
+    thisdir = d2(id).name;
+    load(thisdir,[label '_Cand_sig_modu_include'],[label '_pSSDarm'],[label '_moduarm'],[label '_SSDarm'],'armtheta_slope','armtheta_mrv','PFCbehavechangeData')
+    load(thisdir,'prospectivecoding_p')
+    ppp = cat(1,ppp,prospectivecoding_p);
+    eval(['smi2 = ' label '_Cand_sig_modu_include;']);
+    eval(['p_SSD2 = ' label '_pSSDarm;'])
+    eval(['modu2 = ' label '_moduarm;'])
+    eval(['SSD2 = ' label '_SSDarm;'])
+    modu = cat(1,modu,modu2');
+    p_SSD = cat(1,p_SSD,p_SSD2);
+    SSD = cat(1,SSD,SSD2);
+    smi = cat(1,smi,smi2);
+    mrv = cat(1,mrv,squeeze(armtheta_mrv(1,:,:))');
+    CH_pSSD = cat(1,CH_pSSD,PFCbehavechangeData.pSSD);
+    CH_apSSD = cat(1,CH_apSSD,PFCbehavechangeData.parmSSD);
+end
+
+%SAVE:  modu, armmod, armSSD, headarmSSD,SSD,  headarmmod, p_SSD, p_armSSD, p_headarmSSD, lapmod, lapSSD, lapcorr
+%armtheta_mrv is both dir, in, out
+%then arm, then cell
+
+
+
+ss = smi;
+ss(smi(:,3)==0,:) = NaN;
+figure; hold on;
+
+subplot(3,3,1)
+a = sum(CH_pSSD>=.05);
+b = sum(CH_pSSD<.05);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title('Sig CP Activity')
+
+subplot(3,3,2)
+% a = sum(CH_pSSD(ss(:,1)==1)>=.05);
+% b = sum(CH_pSSD(ss(:,1)==1)<.05);
+a = sum(ss(CH_pSSD<.05,1)==0);
+b = sum(ss(CH_pSSD<.05,1)==1);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title(['Ripple Sig, Of ' label ' CP Sig cells'])
+
+subplot(3,3,3)
+% a = sum(CH_pSSD(p_SSD<.05)>=.05);
+% b = sum(CH_pSSD(p_SSD<.05)<.05);
+a = sum(p_SSD(CH_pSSD<.05)>=.05);
+b = sum(p_SSD(CH_pSSD<.05)<.05);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title('Arm-Replay Sig, Of CP Sig cells')
+
+
+subplot(3,3,4)
+a = sum(CH_apSSD>=.05);
+b = sum(CH_apSSD<.05);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title('Sig Arm Diff at CP')
+
+subplot(3,3,5)
+a = sum(ss(CH_apSSD<.05,1)==0);
+b = sum(ss(CH_apSSD<.05,1)==1);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title([label ' Event Sig, Of CP Arm Sig'])
+
+subplot(3,3,6)
+% a = sum(CH_apSSD(p_SSD<.05)>=.05);
+% b = sum(CH_apSSD(p_SSD<.05)<.05);
+a = sum(p_SSD(CH_apSSD<.05)>=.05);
+b = sum(p_SSD(CH_apSSD<.05)<.05);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title('Arm-Replay Sig, Of CP Arm Sig')
+
+subplot(3,3,7), hold on
+[r,p] = corr(nanmean(mrv,2),SSD,'rows','complete');
+scatter(nanmean(mrv,2),SSD,'k')
+tt = title(['r = ' num2str(round(r,2,'significant')) 'p = ' num2str(round(p,2,'significant'))]);
+if p<.05; tt.TextColor = 'r'; end
+xlabel('HP Theta MRV')
+ylabel('SSD at Choice Point')
+
+
+subplot(3,3,8)
+a = sum(ppp>=.05);
+b = sum(ppp<.05);
+pie([a b],{['Not Sig (' num2str(a) ')'];['Sig (' num2str(b) ')']})
+title('Prospective Coding')
+
+set(gcf,'Position',[ 680         145        1075         821])
+helper_saveandclosefig(['D:\XY_matdata\Figures\ForPaper\ChoicePoint\' label '_pies1'])

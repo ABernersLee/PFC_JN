@@ -1,0 +1,149 @@
+
+
+d2 = dir('*.mat');
+hpf = [];
+pfcf = [];
+binsize = 20;
+SigmaField = 2;
+Two_D_Filter=fspecial('gaussian',[10 10],SigmaField);
+velcutoff = 5;
+fieldfigs = false;
+tocalc = true;
+for id = 1:size(d2,1)
+    load(d2(id).name,'InFR','OutFR','spikedata','vel','hp_cells','other_cells','hpinterneurons','pos','OpenFR')
+    hpf = cat(1,hpf,mean(cat(3,InFR(hp_cells(~ismember(hp_cells,hpinterneurons)),:),OutFR(hp_cells(~ismember(hp_cells,hpinterneurons)),:)),3));
+    pfcf = cat(1,pfcf,mean(cat(3,InFR(other_cells,:),OutFR(other_cells,:)),3));        
+    
+    if fieldfigs        
+        if exist('OpenFR','var'); tocalc = false; else; tocalc = true; end
+        if tocalc
+            pos2 = pos(:,2:3);
+            pos2(:,1) = ceil(pos2(:,1)/binsize);
+            pos2(:,2) = ceil(pos2(:,2)/binsize);
+            pos2 = pos2-min(pos2)+1;
+            tm = diff(pos(:,1)); tm = [tm;tm(end)];
+
+            pos3 = sub2ind(max(pos2),pos2(:,1),pos2(:,2));
+            pos3(vel<velcutoff) = NaN;
+            ind = 1:max(pos2(:,1))*max(pos2(:,2));
+            occ = NaN(size(ind,2),1);
+            f = zeros(size(ind,2),max(spikedata(:,2)));
+            for j = 1:length(ind)
+                occ(ind(j)) = sum(tm(pos3==ind(j)));
+                [h,k] = histc(spikedata(pos3(spikedata(:,3)) == ind(j),2),1:max(spikedata(:,2)));
+                if ~isempty(k)
+                    f(ind(j),k) = h(k);            
+                end
+                if rem(j,1000)==0
+                    disp(['j = ' num2str(j)])
+                end
+            end
+            occ2 = reshape(occ,[max(pos2)]);        
+            f2 = reshape(f,[max(pos2) size(f,2)]);
+
+            OpenFR = f2./repmat(occ2,[1 1 size(f2,3)]);
+        else
+            load(d2(id).name,'OpenFR')
+        end
+                
+        figure; hold on
+        dat = OpenFR(:,:,1);
+        imagesc(dat); 
+        colormap autumn
+        cm = get(gca,'colormap');
+        close gcf
+
+        cm2 = [cm(end:-1:1,:); [1 1 1]];
+    
+        for icell = 1:max(spikedata(:,2))
+            if ismember(icell,other_cells); cellid = 'PFC'; elseif ismember(icell,hpinterneurons); cellid = 'HP INT'; elseif ismember(icell,hp_cells); cellid = 'HP'; end
+            figure; hold on
+            dat = OpenFR(:,:,icell);
+            datnan = isnan(dat);
+            dat(datnan) = 0;
+            dat = filter2(Two_D_Filter,dat);
+            dat(datnan) = max(max(dat))+.01;
+            imagesc(dat); 
+            set(gca,'colormap',cm2)
+            axis xy
+            cmi = get(gca,'clim');
+            set(gca,'clim',[0 cmi(2)])
+            colorbar
+            title([d2(id).name(1:end-4) ', Cell ' num2str(icell) ' ' cellid])
+            helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Figure1\' cellid '_' d2(id).name(1:end-4) '_Cell' num2str(icell)]) 
+        end
+        save(d2(id).name,'OpenFR','-append')
+    end        
+end
+    
+%%
+close all
+[m2,m] = max(hpf,[],2);
+[~,mm] = sort(m);
+dat = hpf(mm,:)./repmat(m2(mm),[1 size(hpf,2)]);
+
+figure; imagesc(-dat)
+axis xy
+colormap gray
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Figure1\imagesc_HP'])
+
+figure; hold on
+iii = 0;
+for ii = 3:6:size(dat,1)
+    iii = iii+1;
+    dat2 = dat(ii,:)+iii-1;
+    patch([1:size(dat,2) size(dat,2):-1:1]',[(iii-1)*ones(size(dat2)) dat2(end:-1:1)]','black','EdgeAlpha',0)
+end
+ylim([0 158])
+xlim([1 size(dat,2)])
+set(gca,'ytick',[10.5:10:157.5],'yticklabel',[10:10:158])
+set(gcf,'Position',[ 2648         -55         517         987])
+xlabel('Linearized Position on Track (cm)')
+ylabel('HP Neuron')
+set(gca,'FontSize',18)
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Figure1\patch_HP'])
+
+[m2,m] = max(pfcf,[],2);
+[~,mm] = sort(m);
+dat = pfcf(mm,:)./repmat(m2(mm),[1 size(pfcf,2)]);
+figure; imagesc(-dat)
+axis xy
+colormap gray
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Figure1\imagesc_PFC'])
+
+
+figure; hold on
+iii = 0;
+for ii = 1:size(dat,1)
+    iii = iii+1;
+    dat2 = dat(ii,:)+iii-1;
+    patch([1:size(dat,2) size(dat,2):-1:1]',[(iii-1)*ones(size(dat2)) dat2(end:-1:1)]','black')
+end
+
+ylim([0 158])
+xlim([1 size(dat,2)])
+set(gca,'ytick',[10.5:10:157.5],'yticklabel',[10:10:158])
+set(gcf,'Position',[ 2648         -55         517         987])
+set(gca,'FontSize',18)
+xlabel('Linearized Position on Track (cm)')
+ylabel('PFC Neuron')
+helper_saveandclosefig(['E:\XY_matdata\Figures\ForPaper\Figure1\patch_PFC'])
+
+%%
+sel_hp = max(hpf,[],2)./mean(hpf,2);
+sel_pfc = max(pfcf,[],2)./mean(pfcf,2);
+%%
+figure; hold on
+histogram(sel_hp,1:37,'FaceColor','k','LineWidth',1); 
+hold on; histogram(sel_pfc,1:37,'FaceColor','r','LineWidth',1); 
+legend('hp','pfc')
+set(gca,'FontSize',18)
+ylabel('Count (Neurons)')
+xlabel('Spacial Selectivity (Max/Mean)')
+%%
+figure; hold on
+histogram(sel_hp,1:37,'Normalization','probability','FaceColor','k','LineWidth',1); 
+hold on; histogram(sel_pfc,1:37,'Normalization','probability','FaceColor','r','LineWidth',1); 
+legend('hp','pfc')
+ylabel('Probability (Count/Total)')
+xlabel('Spacial Selectivity (Max/Mean)')
